@@ -8,21 +8,21 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>@yield('title', 'Revisi Website')</title>
-    <link rel="stylesheet" href="{{ asset('css/revision-ui.css') }}">
-    <script src="{{ asset('js/revision-ui.js') }}" defer></script>
+    <link rel="stylesheet" href="/css/revision-ui.css">
+    <script src="/js/revision-ui.js" defer></script>
 </head>
 <body>
     <div class="app-shell">
         <aside class="rail" aria-label="Navigasi utama">
             <div class="rail-top">
-                <a class="rail-logo" href="{{ route('revisions.index') }}" title="Smartchat" aria-label="Smartchat">
+                <a class="rail-logo" href="{{ route('revisions.index', [], false) }}" title="Smartchat" aria-label="Smartchat">
                     <img 
-                        src="{{ asset('images/logo-smartchat.webp') }}" 
+                        src="/images/logo-smartchat.webp" 
                         alt="Smartchat Logo"
                         class="smartchat-logo-img"
                     >
                 </a>
-                <a class="rail-nav-button is-active" href="{{ route('revisions.index') }}" title="Data revisi" aria-label="Data revisi">
+                <a class="rail-nav-button is-active" href="{{ route('revisions.index', [], false) }}" title="Data revisi" aria-label="Data revisi">
                     <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
                         <ellipse cx="12" cy="5" rx="7" ry="3"></ellipse>
                         <path d="M5 5v6c0 1.7 3.1 3 7 3s7-1.3 7-3V5"></path>

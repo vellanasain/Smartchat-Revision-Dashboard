@@ -42,6 +42,7 @@ html[data-theme="dark"] {
 
 body {
     margin: 0;
+    overflow-x: hidden;
     background: var(--bg);
     color: var(--text);
     font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -274,10 +275,15 @@ html[data-theme="dark"] .theme-icon-moon {
     margin-top: 30px;
 }
 
-.workspace-head h2,
-.board-title h2 {
+.workspace-head h2 {
     margin: 0;
     font-size: 27px;
+    line-height: 1.1;
+}
+
+.board-title h2 {
+    margin: 0;
+    font-size: 21px;
     line-height: 1.1;
 }
 
@@ -442,6 +448,7 @@ select:focus {
     background: var(--panel-2);
     color: var(--muted);
     font-weight: 800;
+    font-size: 13px;
 }
 
 .filter-tabs a.is-selected {
@@ -1260,6 +1267,17 @@ html[data-theme="dark"] .note-dialog header {
     }
 }
 
+
+@media (min-width: 981px) and (max-width: 1180px) {
+    .board-title h2 {
+        font-size: 20px;
+    }
+
+    .filter-tabs a {
+        font-size: 12px;
+    }
+}
+
 @media (max-width: 760px) {
     .app-shell {
         grid-template-columns: 1fr;
@@ -1336,6 +1354,24 @@ html[data-theme="dark"] .note-dialog header {
     .step-action {
         grid-column: 2;
         justify-content: flex-start;
+    }
+
+    .rail {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+    }
+
+    .board-title h2 {
+        font-size: 20px;
+    }
+
+    .revision-table-wrap::after {
+        content: "Geser tabel ke samping";
+        display: block;
+        margin-top: 8px;
+        color: var(--muted);
+        font-size: 12px;
     }
 
     input {
