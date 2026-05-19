@@ -1,0 +1,26 @@
+{
+  "name": "revision-redesign-laravel",
+  "version": "1.0.0",
+  "description": "A Laravel project for UI/UX redesign of the revision page.",
+  "main": "public/index.php",
+  "scripts": {
+    "dev": "npm run development",
+    "development": "mix",
+    "watch": "mix watch",
+    "watch-poll": "mix watch -- --watch-options-poll=1000",
+    "hot": "mix watch --hot",
+    "prod": "npm run production",
+    "production": "mix --production"
+  },
+  "dependencies": {
+    "laravel-mix": "^6.0",
+    "axios": "^0.21",
+    "bootstrap": "^5.1",
+    "jquery": "^3.6"
+  },
+  "devDependencies": {
+    "sass": "^1.32.0",
+    "sass-loader": "^10.1.0"
+  },
+  "license": "MIT"
+}
