@@ -107,7 +107,7 @@
 @section('content')
 <section class="workspace-head">
     <h2>Manajemen Revisi Website</h2>
-    <form class="search-form" method="GET" action="{{ route('revisions.index') }}">
+    <form class="search-form" method="GET" action="{{ route('revisions.index', [], false) }}">
         <input type="hidden" name="filter" value="{{ $filter }}">
         <label>
             <span>Cari revisi</span>
@@ -135,7 +135,7 @@
             <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m16.5 16.5 4 4"></path></svg>
         </button>
     </form>
-    <a class="primary-button add-button" href="{{ route('revisions.create') }}">Tambah Revisi Baru</a>
+    <a class="primary-button add-button" href="{{ route('revisions.create', [], false) }}">Tambah Revisi Baru</a>
 </section>
 
 <section class="metric-grid" aria-label="Ringkasan revisi">
@@ -164,7 +164,7 @@
 
     <div class="filter-tabs" aria-label="Filter revisi">
         @foreach ($filters as $key => $label)
-            <a class="{{ $filter === $key ? 'is-selected' : '' }}" href="{{ route('revisions.index', array_merge($activeQuery, ['filter' => $key])) }}">
+            <a class="{{ $filter === $key ? 'is-selected' : '' }}" href="{{ route('revisions.index', array_merge($activeQuery, ['filter' => $key]), false) }}">
                 {{ $label }}
             </a>
         @endforeach
@@ -212,7 +212,7 @@
                         <td>
                             <div class="action-buttons">
                                 @if ($detailRevision)
-                                    <a class="action-button detail" href="{{ route('revisions.edit', $detailRevision->id) }}" aria-label="Detail revisi {{ $domain }}" title="Detail">
+                                    <a class="action-button detail" href="{{ route('revisions.edit', $detailRevision->id, false) }}" aria-label="Detail revisi {{ $domain }}" title="Detail">
                                         <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true"><path d="M12 20h9"></path><path d="m16.5 3.5 4 4L8 20H4v-4L16.5 3.5Z"></path></svg>
                                     </a>
                                 @else
@@ -220,7 +220,7 @@
                                         <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true"><path d="M12 20h9"></path><path d="m16.5 3.5 4 4L8 20H4v-4L16.5 3.5Z"></path></svg>
                                     </span>
                                 @endif
-                                <form method="POST" action="{{ route('revision-groups.destroy', $group) }}" data-confirm-delete>
+                                <form method="POST" action="{{ route('revision-groups.destroy', $group, false) }}" data-confirm-delete>
                                     @csrf
                                     @method('DELETE')
                                     <button class="action-button delete" type="submit" aria-label="Hapus revisi {{ $domain }}" title="Hapus">
