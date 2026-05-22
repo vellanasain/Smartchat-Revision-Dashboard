@@ -24,6 +24,8 @@ func (h *Handler) Routes() http.Handler {
 	mux.HandleFunc("GET /api/users/marketing", h.marketingUsers)
 	mux.HandleFunc("GET /api/users/website", h.websiteUsers)
 	mux.HandleFunc("GET /api/debug/logs", h.logs)
+	mux.HandleFunc("GET /api/revisions/create-bootstrap", h.createBootstrap)
+	mux.HandleFunc("GET /api/revisions/{id}/detail-bootstrap", h.detailBootstrap)
 	return h.cors(mux)
 }
 
@@ -55,6 +57,27 @@ func (h *Handler) marketingUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, users)
+}
+
+
+
+func (h *Handler) createBootstrap(w http.ResponseWriter, r *http.Request) {
+	result, err := h.repo.CreateBootstrap(r.Context())
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+func (h *Handler) detailBootstrap(w http.ResponseWriter, r *http.Request) {
+	id := repository.ParseIntParam(r.PathValue("id"))
+	result, err := h.repo.DetailBootstrap(r.Context(), id)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (h *Handler) websiteUsers(w http.ResponseWriter, r *http.Request) {
