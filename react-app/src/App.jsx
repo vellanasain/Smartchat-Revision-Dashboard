@@ -50,6 +50,7 @@ function buildPageItems(currentPage, totalPages) {
 export function App() {
   const [theme, setTheme] = useState(localStorage.getItem('revision-theme') || 'dark');
   const [view, setView] = useState(() => (window.location.pathname === '/revisions/create' ? 'create' : 'revisions'));
+  const [activeRevisionId, setActiveRevisionId] = useState(null);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -87,18 +88,18 @@ export function App() {
       <main className="page-shell">
         <header className="topbar">
           <div>
-            <h1>{view === 'logs' ? 'Application Logs' : view === 'create' ? 'Tambah Revisi Baru' : 'Daftar Revisi Website'}</h1>
+            <h1>{view === 'logs' ? 'Application Logs' : view === 'create' ? 'Tambah Revisi Baru' : view === 'detail' ? 'Detail Revisi' : 'Daftar Revisi Website'}</h1>
             <p>Smartchat Website Revision Workspace</p>
           </div>
           <div className="local-state"><span /> Local active</div>
         </header>
-        {view === 'logs' ? <LogsPage /> : view === 'create' ? <CreateRevisionPage onBack={() => setView('revisions')} /> : <RevisionsPage onCreate={() => setView('create')} />}
+        {view === 'logs' ? <LogsPage /> : view === 'create' ? <CreateRevisionPage onBack={() => setView('revisions')} /> : view === 'detail' ? <DetailRevisionPage revisionId={activeRevisionId} onBack={() => setView('revisions')} /> : <RevisionsPage onCreate={() => setView('create')} onOpenDetail={(revisionId) => { setActiveRevisionId(revisionId); setView('detail'); }} />}
       </main>
     </div>
   );
 }
 
-function RevisionsPage({ onCreate }) {
+function RevisionsPage({ onCreate, onOpenDetail }) {
   const [data, setData] = useState(null);
   const [marketingUsers, setMarketingUsers] = useState([]);
   const [websiteUsers, setWebsiteUsers] = useState([]);
@@ -209,7 +210,7 @@ function RevisionsPage({ onCreate }) {
               </tr>
             </thead>
             <tbody>
-              {loading ? <tr><td colSpan="9" className="empty-state">Memuat data...</td></tr> : (data?.items?.length ? data.items.map((item) => <RevisionRow key={item.group_id} item={item} />) : <tr><td colSpan="9" className="empty-state">Tidak ada revisi yang cocok dengan filter.</td></tr>)}
+              {loading ? <tr><td colSpan="9" className="empty-state">Memuat data...</td></tr> : (data?.items?.length ? data.items.map((item) => <RevisionRow key={item.group_id} item={item} onOpenDetail={onOpenDetail} />) : <tr><td colSpan="9" className="empty-state">Tidak ada revisi yang cocok dengan filter.</td></tr>)}
             </tbody>
           </table>
         </div>
@@ -229,7 +230,7 @@ function Metric({ title, value }) {
   return <article className="metric-card"><span>{title}</span><strong>{new Intl.NumberFormat('id-ID').format(value || 0)}</strong></article>;
 }
 
-function RevisionRow({ item }) {
+function RevisionRow({ item, onOpenDetail }) {
   return (
     <tr>
       <td className="domain-column"><strong>{item.domain || '-'}</strong></td>
@@ -242,7 +243,7 @@ function RevisionRow({ item }) {
       <td>{item.active_period || '-'}</td>
       <td>
         <div className="action-buttons">
-          {item.revision_id ? <a className="action-button detail" href={`/revisions/${item.revision_id}/edit`} aria-label={`Detail revisi ${item.domain || "-"}`} title="Detail"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9" /><path d="m16.5 3.5 4 4L8 20H4v-4L16.5 3.5Z" /></svg></a> : <span className="action-button detail is-disabled" aria-label="Detail tidak tersedia"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9" /><path d="m16.5 3.5 4 4L8 20H4v-4L16.5 3.5Z" /></svg></span>}
+          {item.revision_id ? <a className="action-button detail" href={`/revisions/${item.revision_id}/edit`} onClick={(event) => { event.preventDefault(); onOpenDetail(item.revision_id); }} aria-label={`Detail revisi ${item.domain || "-"}`} title="Detail"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9" /><path d="m16.5 3.5 4 4L8 20H4v-4L16.5 3.5Z" /></svg></a> : <span className="action-button detail is-disabled" aria-label="Detail tidak tersedia"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9" /><path d="m16.5 3.5 4 4L8 20H4v-4L16.5 3.5Z" /></svg></span>}
           <button className="action-button delete" type="button" aria-label="Hapus"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v5" /><path d="M14 11v5" /></svg></button>
         </div>
       </td>
@@ -295,6 +296,113 @@ function Pagination({ page, totalPages, totalItems, perPage, onPage }) {
   );
 }
 
+
+
+function DetailRevisionPage({ revisionId, onBack }) {
+  const [csrfToken, setCsrfToken] = useState('');
+  const [error, setError] = useState('');
+  const [domain, setDomain] = useState('-');
+  const [rows, setRows] = useState([0, 1, 2, 3].map((jenis) => ({ jenis, stage: '', work: '', note: '' })));
+  const [projectNotes, setProjectNotes] = useState({ package_website: '', biaya: '', domain_resmi: '' });
+  const [projectInfo, setProjectInfo] = useState({ domain_sementara: '-', nama_klien: '-', tim_marketing: '-', tim_web: '--', sisa_pelunasan: '-', status_pembayaran: '-', tanggal_pelunasan: '-' });
+  const [noteDialog, setNoteDialog] = useState({ open: false, jenis: null, value: '' });
+
+  useEffect(() => {
+    if (!revisionId) return;
+    fetch(`/revisions/${revisionId}/edit`, { credentials: 'include' })
+      .then((response) => response.text())
+      .then((html) => {
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        setCsrfToken(doc.querySelector('input[name="_token"]')?.value || '');
+        setError(doc.querySelector('.alert.alert-danger')?.textContent?.trim() || '');
+        setDomain(doc.querySelector('.form-header h2')?.textContent?.trim() || '-');
+
+        const parsedRows = [0, 1, 2, 3].map((jenis) => ({
+          jenis,
+          stage: doc.querySelector(`select[name="stages[${jenis}]"]`)?.value || '',
+          work: doc.querySelector(`select[name="work_statuses[${jenis}]"]`)?.value || '',
+          note: doc.querySelector(`input[name="revision_notes[${jenis}]"]`)?.value || '',
+        }));
+        setRows(parsedRows);
+        setProjectNotes({
+          package_website: doc.querySelector('input[name="project_notes[package_website]"]')?.value || '',
+          biaya: doc.querySelector('input[name="project_notes[biaya]"]')?.value || '',
+          domain_resmi: doc.querySelector('input[name="project_notes[domain_resmi]"]')?.value || '',
+        });
+
+        const infoMap = {};
+        doc.querySelectorAll('.revision-info-panel .info-list div').forEach((node) => {
+          const key = node.querySelector('dt')?.textContent?.trim() || '';
+          const value = node.querySelector('dd')?.textContent?.trim() || '-';
+          infoMap[key] = value;
+        });
+        setProjectInfo({
+          domain_sementara: infoMap['Domain Sementara'] || '-',
+          nama_klien: infoMap['Nama Klien'] || '-',
+          tim_marketing: infoMap['Tim Marketing'] || '-',
+          tim_web: infoMap['Tim Web'] || '--',
+          sisa_pelunasan: infoMap['Sisa Pelunasan'] || '-',
+          status_pembayaran: infoMap['Status Pembayaran'] || '-',
+          tanggal_pelunasan: infoMap['Tanggal Pelunasan'] || '-',
+        });
+      })
+      .catch(() => setError('Gagal memuat detail revisi.'));
+  }, [revisionId]);
+
+  if (!revisionId) return <section className="form-page"><div className="alert alert-danger">Detail revisi tidak tersedia.</div></section>;
+
+  const stageLabels = { '': '--', waiting_client_data: 'Waiting Client Data', ready_to_revision: 'Ready to Revision' };
+  const workLabels = { '': '--', not_started: 'Not Started', on_process: 'On Progress', done: 'Done' };
+  const r0WorkLabels = { '': '--', done: 'Done' };
+
+  return (
+    <section className="detail-layout">
+      <form id="revision-detail-form" className="revision-work-panel" action={`/revisions/${revisionId}`} method="POST">
+        <input type="hidden" name="_token" value={csrfToken} />
+        <input type="hidden" name="_method" value="PUT" />
+        <div className="form-header"><div><p className="eyebrow">Revision Workflow</p><h2>{domain}</h2></div></div>
+        {error && <div className="alert alert-danger">{error}</div>}
+        <div className="workflow-table-wrap">
+          <table className="workflow-table">
+            <thead><tr><th>Status Revisi</th><th>Revision Stage</th><th>Work Status</th><th>Notes</th></tr></thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.jenis}>
+                  <td><span className="revision-code">R{row.jenis}</span><small>{row.jenis === 0 ? 'Website sudah jadi' : `Revisi ${row.jenis}`}</small></td>
+                  <td>{row.jenis === 0 ? <span className="static-select">--</span> : <select name={`stages[${row.jenis}]`} value={row.stage} onChange={(e)=>setRows(rows.map(r=>{ if(r.jenis!==row.jenis) return r; const nextStage=e.target.value; const nextWork=nextStage==='ready_to_revision' && !r.work ? 'not_started' : r.work; return {...r,stage:nextStage,work:nextWork}; }))}>{Object.entries(stageLabels).map(([v,l]) => <option key={v} value={v}>{l}</option>)}</select>}</td>
+                  <td><select name={`work_statuses[${row.jenis}]`} value={row.work} onChange={(e)=>setRows(rows.map(r=>r.jenis===row.jenis?{...r,work:e.target.value}:r))}>{Object.entries(row.jenis===0?r0WorkLabels:workLabels).map(([v,l]) => <option key={v} value={v}>{l}</option>)}</select></td>
+                  <td><input type="hidden" name={`revision_notes[${row.jenis}]`} value={row.note} /><button className="note-button" type="button" onClick={()=>setNoteDialog({open:true,jenis:row.jenis,value:row.note})}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l5 5v13H7z"></path><path d="M14 3v5h5"></path><path d="M9 13h6"></path><path d="M9 17h6"></path></svg></button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="form-actions"><a className="ghost-button" href="/revisions" onClick={(e)=>{e.preventDefault();onBack();}}>Back</a><button className="primary-button" type="submit">Update</button></div>
+      </form>
+      <aside className="revision-info-panel">
+        <div className="side-section">
+          <p className="eyebrow">Project Info</p>
+          <dl className="info-list">
+            <div><dt>Domain Sementara</dt><dd>{projectInfo.domain_sementara}</dd></div>
+            <div><dt>Nama Klien</dt><dd>{projectInfo.nama_klien}</dd></div>
+            <div><dt>Tim Marketing</dt><dd>{projectInfo.tim_marketing}</dd></div>
+            <div><dt>Tim Web</dt><dd>{projectInfo.tim_web}</dd></div>
+            <div><dt>Sisa Pelunasan</dt><dd>{projectInfo.sisa_pelunasan}</dd></div>
+            <div><dt>Status Pembayaran</dt><dd>{projectInfo.status_pembayaran}</dd></div>
+            <div><dt>Tanggal Pelunasan</dt><dd>{projectInfo.tanggal_pelunasan}</dd></div>
+          </dl>
+        </div>
+        <div className="side-section project-notes">
+          <p className="eyebrow">Notes Project</p>
+          <label className="field"><span>Paket Website</span><input form="revision-detail-form" type="text" name="project_notes[package_website]" value={projectNotes.package_website} onChange={(e)=>setProjectNotes({...projectNotes,package_website:e.target.value})} /></label>
+          <label className="field"><span>Biaya</span><input form="revision-detail-form" type="text" name="project_notes[biaya]" value={projectNotes.biaya} onChange={(e)=>setProjectNotes({...projectNotes,biaya:e.target.value})} /></label>
+          <label className="field"><span>Domain Resmi</span><input form="revision-detail-form" type="text" name="project_notes[domain_resmi]" value={projectNotes.domain_resmi} onChange={(e)=>setProjectNotes({...projectNotes,domain_resmi:e.target.value})} /></label>
+        </div>
+      </aside>
+      {noteDialog.open && <div className="note-modal"><div className="note-modal-backdrop" onClick={()=>setNoteDialog({open:false,jenis:null,value:''})}></div><section className="note-dialog" role="dialog" aria-modal="true"><header><h2>Notes</h2></header><div className="note-dialog-body"><label className="field"><span>Notes</span><textarea rows="10" value={noteDialog.value} onChange={(e)=>setNoteDialog({...noteDialog,value:e.target.value})}></textarea></label></div><footer><button className="ghost-button" type="button" onClick={()=>setNoteDialog({open:false,jenis:null,value:''})}>Back</button><button className="primary-button" type="button" onClick={()=>{setRows(rows.map(r=>r.jenis===noteDialog.jenis?{...r,note:noteDialog.value}:r));setNoteDialog({open:false,jenis:null,value:''});}}>Save</button></footer></section></div>}
+    </section>
+  );
+}
 
 function CreateRevisionPage({ onBack }) {
   const [marketingUsers, setMarketingUsers] = useState([]);
