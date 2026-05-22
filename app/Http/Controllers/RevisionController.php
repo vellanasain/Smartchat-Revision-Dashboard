@@ -237,6 +237,86 @@ class RevisionController extends Controller
         return redirect()->route('revisions.index')->with('success', 'Data revisi berhasil dihapus.');
     }
 
+
+
+    public function detailBootstrap($id)
+    {
+        $revision = Revision::with([
+            'conversation:id,name,user_id,tim_design_id,company_id,notes,end_session,tanggal_pelunasan,sisa_pelunasan,is_automate_pelunasan',
+            'conversation.marketing:id,name,role',
+            'conversation.timWebsite:id,name,role',
+            'conversation.userInfo:id,conversation_id,is_50_paid,is_paid,is_rev_0_done,is_rev_1_done,is_rev_2_done,is_rev_3_done,package,monthly_bill,domain',
+            'group:id,domain,active_revision,status,conversation_id',
+            'group.revisions:id,revision_group_id,conversation_id,jenis,response,notes,is_answered,is_collecting',
+        ])->findOrFail($id);
+
+        $group = $revision->group;
+        $conversation = $revision->conversation;
+        $domain = optional($group)->domain ?: optional($conversation)->domain ?: '-';
+        $money = fn ($value) => filled($value) ? 'Rp ' . number_format((int) $value, 0, ',', '.') : '-';
+        $info = optional($conversation)->userInfo;
+
+        $stageLabels = [
+            ['value' => '', 'label' => '--'],
+            ['value' => 'waiting_client_data', 'label' => 'Waiting Client Data'],
+            ['value' => 'ready_to_revision', 'label' => 'Ready to Revision'],
+        ];
+        $workLabels = [
+            ['value' => '', 'label' => '--'],
+            ['value' => 'not_started', 'label' => 'Not Started'],
+            ['value' => 'on_process', 'label' => 'On Progress'],
+            ['value' => 'done', 'label' => 'Done'],
+        ];
+
+        $rows = collect(range(0,3))->map(function ($jenis) use ($group) {
+            $row = optional($group)->revisions?->firstWhere('jenis', $jenis);
+            $stage = $jenis === 0 ? '' : (filled(optional($row)->response) ? $row->response : '');
+            $work = '';
+            if ($row) {
+                if ((int) $row->is_answered === 1) $work = 'done';
+                elseif ((int) $row->is_collecting === 1) $work = 'on_process';
+            }
+            return [
+                'jenis' => $jenis,
+                'label' => $jenis === 0 ? 'Website sudah jadi' : 'Revisi '.$jenis,
+                'stage' => $stage,
+                'work' => $work,
+                'note' => (string) optional($row)->notes,
+            ];
+        })->values();
+
+        $payment = ((int) optional($info)->is_paid === 1) ? 'Lunas' : (((int) optional($info)->is_50_paid === 1) ? '50% Lunas' : 'Belum Lunas');
+
+        return response()->json([
+            'csrf_token' => csrf_token(),
+            'revision_id' => (int) $revision->id,
+            'domain' => $domain,
+            'project_info' => [
+                'domain_sementara' => $domain,
+                'nama_klien' => optional($conversation)->name ?: '-',
+                'tim_marketing' => optional(optional($conversation)->marketing)->name ?: '-',
+                'tim_web' => optional(optional($conversation)->timWebsite)->name ?: '--',
+                'sisa_pelunasan' => $money(optional($conversation)->sisa_pelunasan),
+                'status_pembayaran' => $payment,
+                'tanggal_pelunasan' => optional(optional($conversation)->tanggal_pelunasan)?->format('d/m/Y') ?: '-',
+            ],
+            'project_notes' => [
+                'package_website' => (string) (optional($info)->package ?: ''),
+                'biaya' => (string) (optional($info)->monthly_bill ?: ''),
+                'domain_resmi' => (string) (optional($info)->domain ?: ''),
+            ],
+            'rows' => $rows,
+            'options' => [
+                'stages' => $stageLabels,
+                'work' => $workLabels,
+                'work_r0' => [
+                    ['value' => '', 'label' => '--'],
+                    ['value' => 'done', 'label' => 'Done'],
+                ],
+            ],
+        ]);
+    }
+
     public function edit($id)
     {
         $revision = Revision::with([
