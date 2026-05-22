@@ -2,12 +2,6 @@ const API_BASE = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8081/api';
 const LARAVEL_FALLBACK_BASE = import.meta.env.VITE_LARAVEL_API_BASE || '/api';
 const PARITY_VERIFY = (import.meta.env.VITE_PARITY_VERIFY || '1') === '1';
 
-function shapeOf(value) {
-  if (value === null || value === undefined) return 'null';
-  if (Array.isArray(value)) return 'array';
-  return typeof value;
-}
-
 function collectShape(obj, prefix = '', out = {}) {
   if (obj === null || obj === undefined) {
     out[prefix || '$'] = 'null';
@@ -60,14 +54,15 @@ export async function fetchJSON(path) {
   const laravelURL = `${LARAVEL_FALLBACK_BASE}${path}`;
 
   const goFetch = fetch(goURL, { credentials: 'include' });
-  const laravelFetch = PARITY_VERIFY ? fetch(laravelURL, { credentials: 'include' }).catch(() => null) : null;
+  const shouldVerify = PARITY_VERIFY && parityKeys(path).length > 0;
+  const laravelFetch = shouldVerify ? fetch(laravelURL, { credentials: 'include' }).catch(() => null) : null;
 
   try {
     const response = await goFetch;
     if (!response.ok) throw new Error(`Request failed: ${response.status}`);
     const goPayload = await response.json();
 
-    if (PARITY_VERIFY && laravelFetch) {
+    if (shouldVerify && laravelFetch) {
       laravelFetch.then(async (fallbackResponse) => {
         if (!fallbackResponse || !fallbackResponse.ok) return;
         const laravelPayload = await fallbackResponse.json();

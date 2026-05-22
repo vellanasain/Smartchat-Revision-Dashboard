@@ -310,8 +310,10 @@ function DetailRevisionPage({ revisionId, onBack }) {
 
   useEffect(() => {
     if (!revisionId) return;
+    let alive = true;
     fetchJSON(`/revisions/${revisionId}/detail-bootstrap`)
       .then((payload) => {
+        if (!alive) return;
         setCsrfToken(payload.csrf_token || '');
         setError('');
         setDomain(payload.domain || '-');
@@ -320,7 +322,8 @@ function DetailRevisionPage({ revisionId, onBack }) {
         setProjectInfo(payload.project_info || { domain_sementara: '-', nama_klien: '-', tim_marketing: '-', tim_web: '--', sisa_pelunasan: '-', status_pembayaran: '-', tanggal_pelunasan: '-' });
         setOptions(payload.options || { stages: [], work: [], work_r0: [] });
       })
-      .catch(() => setError('Gagal memuat detail revisi.'));
+      .catch(() => alive && setError('Gagal memuat detail revisi.'));
+    return () => { alive = false; };
   }, [revisionId]);
 
   if (!revisionId) return <section className="form-page"><div className="alert alert-danger">Detail revisi tidak tersedia.</div></section>;
@@ -387,8 +390,10 @@ function CreateRevisionPage({ onBack }) {
   const comboboxRef = useRef(null);
 
   useEffect(() => {
+    let alive = true;
     fetchJSON('/revisions/create-bootstrap')
       .then((payload) => {
+        if (!alive) return;
         setCsrfToken(payload.csrf_token || '');
         setMarketingUsers(payload.marketing_users || []);
         setWebsiteUsers(payload.website_users || []);
@@ -406,6 +411,7 @@ function CreateRevisionPage({ onBack }) {
         setError(payload.error || '');
       })
       .catch(() => {});
+    return () => { alive = false; };
   }, []);
 
   useEffect(() => {
@@ -430,6 +436,11 @@ function CreateRevisionPage({ onBack }) {
     .slice(0, 80);
 
   const onSubmit = (event) => {
+    if (!csrfToken) {
+      event.preventDefault();
+      setError('Token keamanan belum siap. Coba beberapa detik lagi.');
+      return;
+    }
     if (!form.domain || !form.user_id) {
       event.preventDefault();
       setError('Domain sementara dan tim marketing wajib diisi.');
