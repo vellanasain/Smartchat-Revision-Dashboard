@@ -152,6 +152,46 @@ class RevisionController extends Controller
         return str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $value);
     }
 
+
+
+    public function createBootstrap()
+    {
+        $teamUsers = User::where('role', 'website')->orderBy('name')->get(['id', 'name']);
+        $marketingUsers = User::query()
+            ->whereIn(DB::raw('LOWER(name)'), array_map('strtolower', $this->marketingNames))
+            ->get(['id', 'name'])
+            ->sortBy(fn ($user) => array_search(strtolower($user->name), array_map('strtolower', $this->marketingNames)))
+            ->values();
+        $clients = Conversation::query()
+            ->whereNotNull('name')
+            ->where('name', '<>', '')
+            ->whereIn('user_id', $marketingUsers->pluck('id'))
+            ->select('user_id', 'name')
+            ->distinct()
+            ->orderBy('name')
+            ->get()
+            ->map(fn ($client) => [
+                'name' => $client->name,
+                'marketing_id' => $client->user_id,
+            ])
+            ->values();
+
+        return response()->json([
+            'csrf_token' => csrf_token(),
+            'marketing_users' => $marketingUsers,
+            'website_users' => $teamUsers,
+            'clients' => $clients,
+            'defaults' => [
+                'domain' => '',
+                'user_id' => '',
+                'nama' => '',
+                'tim_design_id' => '',
+                'sisa_pelunasan' => '',
+            ],
+            'error' => session('errors')?->first(),
+        ]);
+    }
+
     public function create()
     {
         $teamUsers = User::where('role', 'website')->orderBy('name')->get(['id', 'name']);

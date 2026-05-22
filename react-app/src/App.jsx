@@ -387,26 +387,23 @@ function CreateRevisionPage({ onBack }) {
   const comboboxRef = useRef(null);
 
   useEffect(() => {
-    fetchJSON('/users/marketing').then(setMarketingUsers).catch(() => {});
-    fetchJSON('/users/website').then(setWebsiteUsers).catch(() => {});
-    fetch('/revisions/create', { credentials: 'include' })
-      .then((response) => response.text())
-      .then((html) => {
-        const doc = new DOMParser().parseFromString(html, 'text/html');
-        const token = doc.querySelector('input[name="_token"]')?.value || '';
-        const clientRaw = doc.getElementById('client-data')?.textContent || '[]';
-        const serverError = doc.querySelector('.alert.alert-danger')?.textContent?.trim() || '';
-        const domain = doc.querySelector('input[name="domain"]')?.value || '';
-        const userId = doc.querySelector('select[name="user_id"]')?.value || '';
-        const nama = doc.querySelector('input[name="nama"]')?.value || '';
-        const timDesignId = doc.querySelector('select[name="tim_design_id"]')?.value || '';
-        const sisaPelunasan = doc.querySelector('input[name="sisa_pelunasan"]')?.value || '';
-
-        setCsrfToken(token);
-        setClients(JSON.parse(clientRaw));
-        setForm({ domain, user_id: userId, nama, tim_design_id: timDesignId, sisa_pelunasan: sisaPelunasan });
-        setMoneyInput(formatRupiah(sisaPelunasan));
-        setError(serverError);
+    fetchJSON('/revisions/create-bootstrap')
+      .then((payload) => {
+        setCsrfToken(payload.csrf_token || '');
+        setMarketingUsers(payload.marketing_users || []);
+        setWebsiteUsers(payload.website_users || []);
+        setClients(payload.clients || []);
+        const defaults = payload.defaults || {};
+        const nextForm = {
+          domain: defaults.domain || '',
+          user_id: defaults.user_id || '',
+          nama: defaults.nama || '',
+          tim_design_id: defaults.tim_design_id || '',
+          sisa_pelunasan: defaults.sisa_pelunasan || '',
+        };
+        setForm(nextForm);
+        setMoneyInput(formatRupiah(nextForm.sisa_pelunasan));
+        setError(payload.error || '');
       })
       .catch(() => {});
   }, []);
