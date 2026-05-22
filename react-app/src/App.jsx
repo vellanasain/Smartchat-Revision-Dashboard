@@ -8,6 +8,45 @@ const filters = [
   ['revision_done', 'Revisi Sudah Selesai'],
 ];
 
+function readParamsFromURL() {
+  const query = new URLSearchParams(window.location.search);
+  return {
+    q: query.get('q') || '',
+    filter: query.get('filter') || 'all',
+    marketing_id: query.get('marketing_id') || '',
+    web_id: query.get('web_id') || '',
+    page: Math.max(1, Number(query.get('page') || 1) || 1),
+  };
+}
+
+function writeParamsToURL(params) {
+  const query = new URLSearchParams();
+  if (params.filter && params.filter !== 'all') query.set('filter', params.filter);
+  if (params.q) query.set('q', params.q);
+  if (params.marketing_id) query.set('marketing_id', params.marketing_id);
+  if (params.web_id) query.set('web_id', params.web_id);
+  if (params.page && params.page > 1) query.set('page', String(params.page));
+  const queryString = query.toString();
+  const nextURL = `${window.location.pathname}${queryString ? `?${queryString}` : ''}`;
+  window.history.pushState({}, '', nextURL);
+}
+
+
+
+function buildPageItems(currentPage, totalPages) {
+  const pages = new Set([1, totalPages]);
+  for (let page = currentPage - 1; page <= currentPage + 1; page++) {
+    if (page >= 1 && page <= totalPages) pages.add(page);
+  }
+  const sortedPages = [...pages].sort((a, b) => a - b);
+  const items = [];
+  for (let index = 0; index < sortedPages.length; index++) {
+    const page = sortedPages[index];
+    if (index > 0 && page - sortedPages[index - 1] > 1) items.push('...');
+    items.push(page);
+  }
+  return items;
+}
 export function App() {
   const [theme, setTheme] = useState(localStorage.getItem('revision-theme') || 'dark');
   const [view, setView] = useState('revisions');
@@ -22,19 +61,25 @@ export function App() {
       <aside className="rail" aria-label="Navigasi utama">
         <div className="rail-top">
           <a className="rail-logo" href="#" aria-label="Smartchat">
-            <img src="/logo-smartchat.webp" alt="Smartchat Logo" className="smartchat-logo-img" />
+            <img src="/images/logo-smartchat.webp" alt="Smartchat Logo" className="smartchat-logo-img" />
           </a>
-          <button className={`rail-nav-button ${view === 'revisions' ? 'is-active' : ''}`} onClick={() => setView('revisions')} title="Data revisi">
+          <a className={`rail-nav-button ${view === 'revisions' ? 'is-active' : ''}`} href="#" onClick={(event) => { event.preventDefault(); setView('revisions'); }} title="Data revisi" aria-label="Data revisi">
             <svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5" rx="7" ry="3" /><path d="M5 5v6c0 1.7 3.1 3 7 3s7-1.3 7-3V5" /><path d="M5 11v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6" /></svg>
-          </button>
-          <button className={`rail-nav-button ${view === 'logs' ? 'is-active' : ''}`} onClick={() => setView('logs')} title="Application Logs">
+          </a>
+          <a className={`rail-nav-button ${view === 'logs' ? 'is-active' : ''}`} href="#" onClick={(event) => { event.preventDefault(); setView('logs'); }} title="Application Logs" aria-label="Application Logs">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l3 3v15H6z" /><path d="M14 3v4h4" /><path d="M9 11h6" /><path d="M9 15h6" /></svg>
-          </button>
+          </a>
         </div>
         <div className="rail-bottom">
-          <button className="rail-nav-button theme-switch" type="button" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} aria-label="Ganti mode">
+          <button className="rail-nav-button theme-switch" type="button" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} aria-label="Ganti mode gelap terang" title="Ganti mode">
             <span className="theme-icon theme-icon-sun" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4 12H2M22 12h-2M5 5l1.5 1.5M17.5 17.5 19 19M19 5l-1.5 1.5M6.5 17.5 5 19" /></svg></span>
             <span className="theme-icon theme-icon-moon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a7 7 0 1 0 10.5 10.5Z" /></svg></span>
+          </button>
+          <button className="rail-nav-button" type="button" aria-label="Pengaturan" title="Pengaturan">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5Z" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1A2 2 0 1 1 4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7A2 2 0 1 1 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3h.1a1.7 1.7 0 0 0 .9-1.6V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1A2 2 0 1 1 19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9v.1a1.7 1.7 0 0 0 1.6.9h.1a2 2 0 0 1 0 4H21a1.7 1.7 0 0 0-1.6 1Z" /></svg>
+          </button>
+          <button className="rail-nav-button logout-button" type="button" aria-label="Logout" title="Logout">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-2" /><path d="M10 12h10" /><path d="m17 9 3 3-3 3" /></svg>
           </button>
         </div>
       </aside>
@@ -45,7 +90,7 @@ export function App() {
             <h1>{view === 'logs' ? 'Application Logs' : 'Daftar Revisi Website'}</h1>
             <p>Smartchat Website Revision Workspace</p>
           </div>
-          <div className="local-state"><span /> React + Go preview</div>
+          <div className="local-state"><span /> Local active</div>
         </header>
         {view === 'logs' ? <LogsPage /> : <RevisionsPage />}
       </main>
@@ -57,9 +102,10 @@ function RevisionsPage() {
   const [data, setData] = useState(null);
   const [marketingUsers, setMarketingUsers] = useState([]);
   const [websiteUsers, setWebsiteUsers] = useState([]);
-  const [params, setParams] = useState({ q: '', filter: 'all', marketing_id: '', web_id: '', page: 1 });
+  const [params, setParams] = useState(() => readParamsFromURL());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [searchDraft, setSearchDraft] = useState(() => readParamsFromURL().q);
 
   const queryString = useMemo(() => {
     const query = new URLSearchParams();
@@ -85,36 +131,51 @@ function RevisionsPage() {
     fetchJSON('/users/website').then(setWebsiteUsers).catch(() => {});
   }, []);
 
+  useEffect(() => {
+    const onPopState = () => {
+      const nextParams = readParamsFromURL();
+      setParams(nextParams);
+      setSearchDraft(nextParams.q);
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+
+  const updateParams = (nextParams) => {
+    setParams(nextParams);
+    writeParamsToURL(nextParams);
+  };
+
   const stats = data?.stats || { total: 0, unpaid: 0, process_revision: 0, revision_done: 0 };
 
   return (
     <>
       <section className="workspace-head">
         <h2>Manajemen Revisi Website</h2>
-        <form className="search-form" onSubmit={(event) => event.preventDefault()}>
+        <form className="search-form" onSubmit={(event) => { event.preventDefault(); updateParams({ ...params, q: searchDraft, page: 1 }); }}>
           <label>
             <span>Cari revisi</span>
-            <input type="search" value={params.q} onChange={(event) => setParams({ ...params, q: event.target.value, page: 1 })} placeholder="Cari domain, nama klien, atau tim" />
+            <input type="search" value={searchDraft} onChange={(event) => setSearchDraft(event.target.value)} placeholder="Cari domain, nama klien, atau tim" />
           </label>
           <label>
             <span>Filter tim marketing</span>
-            <select value={params.marketing_id} onChange={(event) => setParams({ ...params, marketing_id: event.target.value, page: 1 })}>
+            <select value={params.marketing_id} onChange={(event) => updateParams({ ...params, marketing_id: event.target.value, page: 1 })}>
               <option value="">Semua Marketing</option>
               {marketingUsers.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
             </select>
           </label>
           <label>
             <span>Filter tim web</span>
-            <select value={params.web_id} onChange={(event) => setParams({ ...params, web_id: event.target.value, page: 1 })}>
+            <select value={params.web_id} onChange={(event) => updateParams({ ...params, web_id: event.target.value, page: 1 })}>
               <option value="">Semua Tim Web</option>
               {websiteUsers.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
             </select>
           </label>
-          <button className="primary-button icon-button search-button" type="button" aria-label="Cari">
+          <button className="primary-button icon-button search-button" type="submit" aria-label="Cari">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m16.5 16.5 4 4" /></svg>
           </button>
         </form>
-        <a className="primary-button add-button" href="#">Tambah Revisi Baru</a>
+        <a className="primary-button add-button" href="/revisions/create">Tambah Revisi Baru</a>
       </section>
 
       <section className="metric-grid" aria-label="Ringkasan revisi">
@@ -128,7 +189,7 @@ function RevisionsPage() {
         <div className="board-title"><h2>Daftar Revisi Aktif</h2></div>
         <div className="filter-tabs" aria-label="Filter revisi">
           {filters.map(([key, label]) => (
-            <button key={key} className={params.filter === key ? 'is-selected' : ''} onClick={() => setParams({ ...params, filter: key, page: 1 })}>{label}</button>
+            <a key={key} href="#" className={params.filter === key ? 'is-selected' : ''} onClick={(event) => { event.preventDefault(); updateParams({ ...params, filter: key, page: 1 }); }}>{label}</a>
           ))}
         </div>
         <div className="revision-table-wrap">
@@ -148,7 +209,7 @@ function RevisionsPage() {
               </tr>
             </thead>
             <tbody>
-              {loading ? <tr><td colSpan="9" className="empty-state">Memuat data...</td></tr> : data?.items?.map((item) => <RevisionRow key={item.group_id} item={item} />)}
+              {loading ? <tr><td colSpan="9" className="empty-state">Memuat data...</td></tr> : (data?.items?.length ? data.items.map((item) => <RevisionRow key={item.group_id} item={item} />) : <tr><td colSpan="9" className="empty-state">Tidak ada revisi yang cocok dengan filter.</td></tr>)}
             </tbody>
           </table>
         </div>
@@ -157,7 +218,7 @@ function RevisionsPage() {
           totalPages={data?.total_pages || 1}
           totalItems={data?.total_items || 0}
           perPage={data?.per_page || 12}
-          onPage={(page) => setParams({ ...params, page })}
+          onPage={(page) => updateParams({ ...params, page })}
         />
       </section>
     </>
@@ -181,7 +242,7 @@ function RevisionRow({ item }) {
       <td>{item.active_period || '-'}</td>
       <td>
         <div className="action-buttons">
-          <a className="action-button detail" href="#" aria-label="Detail"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9" /><path d="m16.5 3.5 4 4L8 20H4v-4L16.5 3.5Z" /></svg></a>
+          {item.revision_id ? <a className="action-button detail" href={`/revisions/${item.revision_id}/edit`} aria-label={`Detail revisi ${item.domain || "-"}`} title="Detail"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9" /><path d="m16.5 3.5 4 4L8 20H4v-4L16.5 3.5Z" /></svg></a> : <span className="action-button detail is-disabled" aria-label="Detail tidak tersedia"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9" /><path d="m16.5 3.5 4 4L8 20H4v-4L16.5 3.5Z" /></svg></span>}
           <button className="action-button delete" type="button" aria-label="Hapus"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v5" /><path d="M14 11v5" /></svg></button>
         </div>
       </td>
@@ -190,35 +251,43 @@ function RevisionRow({ item }) {
 }
 
 function Pagination({ page, totalPages, totalItems, perPage, onPage }) {
+  if (totalPages <= 1) return null;
+
   const start = totalItems === 0 ? 0 : (page - 1) * perPage + 1;
   const end = Math.min(page * perPage, totalItems);
-  const pages = [];
-  const from = Math.max(1, page - 2);
-  const to = Math.min(totalPages, page + 2);
-
-  for (let index = from; index <= to; index++) {
-    pages.push(index);
-  }
+  const items = buildPageItems(page, totalPages);
 
   return (
     <div className="pagination-wrap">
-      <nav className="clean-pagination" aria-label="Pagination">
+      <nav className="clean-pagination" role="navigation" aria-label="Pagination">
         <p className="pagination-summary">Showing {start} to {end} of {totalItems} results</p>
         <ul className="pagination">
           <li className={`page-item ${page <= 1 ? 'disabled' : ''}`}>
-            <button className="page-link" type="button" disabled={page <= 1} onClick={() => onPage(page - 1)} aria-label="Halaman sebelumnya">&lsaquo;</button>
+            {page <= 1 ? (
+              <span className="page-link" aria-hidden="true">&lsaquo;</span>
+            ) : (
+              <a className="page-link" href="#" rel="prev" aria-label="Halaman sebelumnya" onClick={(event) => { event.preventDefault(); onPage(page - 1); }}>&lsaquo;</a>
+            )}
           </li>
-          {from > 1 && <li className="page-item"><button className="page-link" type="button" onClick={() => onPage(1)}>1</button></li>}
-          {from > 2 && <li className="page-item disabled"><span className="page-link">...</span></li>}
-          {pages.map((item) => (
-            <li key={item} className={`page-item ${item === page ? 'active' : ''}`}>
-              <button className="page-link" type="button" onClick={() => onPage(item)}>{item}</button>
+
+          {items.map((item, index) => (
+            <li key={`${item}-${index}`} className={`page-item ${item === '...' ? 'disabled' : item === page ? 'active' : ''}`}>
+              {item === '...' ? (
+                <span className="page-link">...</span>
+              ) : item === page ? (
+                <span className="page-link">{item}</span>
+              ) : (
+                <a className="page-link" href="#" onClick={(event) => { event.preventDefault(); onPage(item); }}>{item}</a>
+              )}
             </li>
           ))}
-          {to < totalPages - 1 && <li className="page-item disabled"><span className="page-link">...</span></li>}
-          {to < totalPages && <li className="page-item"><button className="page-link" type="button" onClick={() => onPage(totalPages)}>{totalPages}</button></li>}
+
           <li className={`page-item ${page >= totalPages ? 'disabled' : ''}`}>
-            <button className="page-link" type="button" disabled={page >= totalPages} onClick={() => onPage(page + 1)} aria-label="Halaman berikutnya">&rsaquo;</button>
+            {page >= totalPages ? (
+              <span className="page-link" aria-hidden="true">&rsaquo;</span>
+            ) : (
+              <a className="page-link" href="#" rel="next" aria-label="Halaman berikutnya" onClick={(event) => { event.preventDefault(); onPage(page + 1); }}>&rsaquo;</a>
+            )}
           </li>
         </ul>
       </nav>
