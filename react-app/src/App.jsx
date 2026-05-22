@@ -306,54 +306,25 @@ function DetailRevisionPage({ revisionId, onBack }) {
   const [projectNotes, setProjectNotes] = useState({ package_website: '', biaya: '', domain_resmi: '' });
   const [projectInfo, setProjectInfo] = useState({ domain_sementara: '-', nama_klien: '-', tim_marketing: '-', tim_web: '--', sisa_pelunasan: '-', status_pembayaran: '-', tanggal_pelunasan: '-' });
   const [noteDialog, setNoteDialog] = useState({ open: false, jenis: null, value: '' });
+  const [options, setOptions] = useState({ stages: [], work: [], work_r0: [] });
 
   useEffect(() => {
     if (!revisionId) return;
-    fetch(`/revisions/${revisionId}/edit`, { credentials: 'include' })
-      .then((response) => response.text())
-      .then((html) => {
-        const doc = new DOMParser().parseFromString(html, 'text/html');
-        setCsrfToken(doc.querySelector('input[name="_token"]')?.value || '');
-        setError(doc.querySelector('.alert.alert-danger')?.textContent?.trim() || '');
-        setDomain(doc.querySelector('.form-header h2')?.textContent?.trim() || '-');
-
-        const parsedRows = [0, 1, 2, 3].map((jenis) => ({
-          jenis,
-          stage: doc.querySelector(`select[name="stages[${jenis}]"]`)?.value || '',
-          work: doc.querySelector(`select[name="work_statuses[${jenis}]"]`)?.value || '',
-          note: doc.querySelector(`input[name="revision_notes[${jenis}]"]`)?.value || '',
-        }));
-        setRows(parsedRows);
-        setProjectNotes({
-          package_website: doc.querySelector('input[name="project_notes[package_website]"]')?.value || '',
-          biaya: doc.querySelector('input[name="project_notes[biaya]"]')?.value || '',
-          domain_resmi: doc.querySelector('input[name="project_notes[domain_resmi]"]')?.value || '',
-        });
-
-        const infoMap = {};
-        doc.querySelectorAll('.revision-info-panel .info-list div').forEach((node) => {
-          const key = node.querySelector('dt')?.textContent?.trim() || '';
-          const value = node.querySelector('dd')?.textContent?.trim() || '-';
-          infoMap[key] = value;
-        });
-        setProjectInfo({
-          domain_sementara: infoMap['Domain Sementara'] || '-',
-          nama_klien: infoMap['Nama Klien'] || '-',
-          tim_marketing: infoMap['Tim Marketing'] || '-',
-          tim_web: infoMap['Tim Web'] || '--',
-          sisa_pelunasan: infoMap['Sisa Pelunasan'] || '-',
-          status_pembayaran: infoMap['Status Pembayaran'] || '-',
-          tanggal_pelunasan: infoMap['Tanggal Pelunasan'] || '-',
-        });
+    fetchJSON(`/revisions/${revisionId}/detail-bootstrap`)
+      .then((payload) => {
+        setCsrfToken(payload.csrf_token || '');
+        setError('');
+        setDomain(payload.domain || '-');
+        setRows(payload.rows || []);
+        setProjectNotes(payload.project_notes || { package_website: '', biaya: '', domain_resmi: '' });
+        setProjectInfo(payload.project_info || { domain_sementara: '-', nama_klien: '-', tim_marketing: '-', tim_web: '--', sisa_pelunasan: '-', status_pembayaran: '-', tanggal_pelunasan: '-' });
+        setOptions(payload.options || { stages: [], work: [], work_r0: [] });
       })
       .catch(() => setError('Gagal memuat detail revisi.'));
   }, [revisionId]);
 
   if (!revisionId) return <section className="form-page"><div className="alert alert-danger">Detail revisi tidak tersedia.</div></section>;
 
-  const stageLabels = { '': '--', waiting_client_data: 'Waiting Client Data', ready_to_revision: 'Ready to Revision' };
-  const workLabels = { '': '--', not_started: 'Not Started', on_process: 'On Progress', done: 'Done' };
-  const r0WorkLabels = { '': '--', done: 'Done' };
 
   return (
     <section className="detail-layout">
@@ -369,8 +340,8 @@ function DetailRevisionPage({ revisionId, onBack }) {
               {rows.map((row) => (
                 <tr key={row.jenis}>
                   <td><span className="revision-code">R{row.jenis}</span><small>{row.jenis === 0 ? 'Website sudah jadi' : `Revisi ${row.jenis}`}</small></td>
-                  <td>{row.jenis === 0 ? <span className="static-select">--</span> : <select name={`stages[${row.jenis}]`} value={row.stage} onChange={(e)=>setRows(rows.map(r=>{ if(r.jenis!==row.jenis) return r; const nextStage=e.target.value; const nextWork=nextStage==='ready_to_revision' && !r.work ? 'not_started' : r.work; return {...r,stage:nextStage,work:nextWork}; }))}>{Object.entries(stageLabels).map(([v,l]) => <option key={v} value={v}>{l}</option>)}</select>}</td>
-                  <td><select name={`work_statuses[${row.jenis}]`} value={row.work} onChange={(e)=>setRows(rows.map(r=>r.jenis===row.jenis?{...r,work:e.target.value}:r))}>{Object.entries(row.jenis===0?r0WorkLabels:workLabels).map(([v,l]) => <option key={v} value={v}>{l}</option>)}</select></td>
+                  <td>{row.jenis === 0 ? <span className="static-select">--</span> : <select name={`stages[${row.jenis}]`} value={row.stage} onChange={(e)=>setRows(rows.map(r=>{ if(r.jenis!==row.jenis) return r; const nextStage=e.target.value; const nextWork=nextStage==='ready_to_revision' && !r.work ? 'not_started' : r.work; return {...r,stage:nextStage,work:nextWork}; }))}>{options.stages.map((opt) => <option key={opt.value || 'empty'} value={opt.value}>{opt.label}</option>)}</select>}</td>
+                  <td><select name={`work_statuses[${row.jenis}]`} value={row.work} onChange={(e)=>setRows(rows.map(r=>r.jenis===row.jenis?{...r,work:e.target.value}:r))}>{(row.jenis === 0 ? options.work_r0 : options.work).map((opt) => <option key={opt.value || `empty-${row.jenis}`} value={opt.value}>{opt.label}</option>)}</select></td>
                   <td><input type="hidden" name={`revision_notes[${row.jenis}]`} value={row.note} /><button className="note-button" type="button" onClick={()=>setNoteDialog({open:true,jenis:row.jenis,value:row.note})}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l5 5v13H7z"></path><path d="M14 3v5h5"></path><path d="M9 13h6"></path><path d="M9 17h6"></path></svg></button></td>
                 </tr>
               ))}
