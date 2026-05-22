@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { fetchJSON, money } from './lib/api';
 
 const filters = [
@@ -49,7 +49,7 @@ function buildPageItems(currentPage, totalPages) {
 }
 export function App() {
   const [theme, setTheme] = useState(localStorage.getItem('revision-theme') || 'dark');
-  const [view, setView] = useState('revisions');
+  const [view, setView] = useState(() => (window.location.pathname === '/revisions/create' ? 'create' : 'revisions'));
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -87,18 +87,18 @@ export function App() {
       <main className="page-shell">
         <header className="topbar">
           <div>
-            <h1>{view === 'logs' ? 'Application Logs' : 'Daftar Revisi Website'}</h1>
+            <h1>{view === 'logs' ? 'Application Logs' : view === 'create' ? 'Tambah Revisi Baru' : 'Daftar Revisi Website'}</h1>
             <p>Smartchat Website Revision Workspace</p>
           </div>
           <div className="local-state"><span /> Local active</div>
         </header>
-        {view === 'logs' ? <LogsPage /> : <RevisionsPage />}
+        {view === 'logs' ? <LogsPage /> : view === 'create' ? <CreateRevisionPage onBack={() => setView('revisions')} /> : <RevisionsPage onCreate={() => setView('create')} />}
       </main>
     </div>
   );
 }
 
-function RevisionsPage() {
+function RevisionsPage({ onCreate }) {
   const [data, setData] = useState(null);
   const [marketingUsers, setMarketingUsers] = useState([]);
   const [websiteUsers, setWebsiteUsers] = useState([]);
@@ -175,7 +175,7 @@ function RevisionsPage() {
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m16.5 16.5 4 4" /></svg>
           </button>
         </form>
-        <a className="primary-button add-button" href="/revisions/create">Tambah Revisi Baru</a>
+        <a className="primary-button add-button" href="/revisions/create" onClick={(event) => { event.preventDefault(); onCreate(); }}>Tambah Revisi Baru</a>
       </section>
 
       <section className="metric-grid" aria-label="Ringkasan revisi">
@@ -292,6 +292,146 @@ function Pagination({ page, totalPages, totalItems, perPage, onPage }) {
         </ul>
       </nav>
     </div>
+  );
+}
+
+
+function CreateRevisionPage({ onBack }) {
+  const [marketingUsers, setMarketingUsers] = useState([]);
+  const [websiteUsers, setWebsiteUsers] = useState([]);
+  const [clients, setClients] = useState([]);
+  const [csrfToken, setCsrfToken] = useState('');
+  const [form, setForm] = useState({ domain: '', user_id: '', nama: '', tim_design_id: '', sisa_pelunasan: '' });
+  const [moneyInput, setMoneyInput] = useState('');
+  const [error, setError] = useState('');
+  const [clientMenuOpen, setClientMenuOpen] = useState(false);
+  const comboboxRef = useRef(null);
+
+  useEffect(() => {
+    fetchJSON('/users/marketing').then(setMarketingUsers).catch(() => {});
+    fetchJSON('/users/website').then(setWebsiteUsers).catch(() => {});
+    fetch('/revisions/create', { credentials: 'include' })
+      .then((response) => response.text())
+      .then((html) => {
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const token = doc.querySelector('input[name="_token"]')?.value || '';
+        const clientRaw = doc.getElementById('client-data')?.textContent || '[]';
+        const serverError = doc.querySelector('.alert.alert-danger')?.textContent?.trim() || '';
+        const domain = doc.querySelector('input[name="domain"]')?.value || '';
+        const userId = doc.querySelector('select[name="user_id"]')?.value || '';
+        const nama = doc.querySelector('input[name="nama"]')?.value || '';
+        const timDesignId = doc.querySelector('select[name="tim_design_id"]')?.value || '';
+        const sisaPelunasan = doc.querySelector('input[name="sisa_pelunasan"]')?.value || '';
+
+        setCsrfToken(token);
+        setClients(JSON.parse(clientRaw));
+        setForm({ domain, user_id: userId, nama, tim_design_id: timDesignId, sisa_pelunasan: sisaPelunasan });
+        setMoneyInput(formatRupiah(sisaPelunasan));
+        setError(serverError);
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const closeOnOutside = (event) => {
+      if (!comboboxRef.current?.contains(event.target)) {
+        setClientMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('click', closeOnOutside);
+    return () => document.removeEventListener('click', closeOnOutside);
+  }, []);
+
+  const formatRupiah = (value) => {
+    const number = String(value || '').replace(/\D/g, '');
+    return number ? `Rp ${new Intl.NumberFormat('id-ID').format(Number(number))}` : '';
+  };
+
+  const filteredClients = clients
+    .filter((client) => String(client.marketing_id) === String(form.user_id))
+    .filter((client) => !form.nama.trim() || String(client.name).toLowerCase().includes(form.nama.trim().toLowerCase()))
+    .slice(0, 80);
+
+  const onSubmit = (event) => {
+    if (!form.domain || !form.user_id) {
+      event.preventDefault();
+      setError('Domain sementara dan tim marketing wajib diisi.');
+    }
+  };
+
+  return (
+    <section className="form-page">
+      <form className="edit-panel create-revision-form" action="/revisions" method="POST" onSubmit={onSubmit}>
+        <input type="hidden" name="_token" value={csrfToken} />
+        <div className="form-header">
+          <div>
+            <p className="eyebrow">Revisi Website</p>
+            <h2>Data Revisi Baru</h2>
+          </div>
+        </div>
+
+        {error && <div className="alert alert-danger">{error}</div>}
+
+        <div className="form-grid">
+          <label className="field">
+            <span>Domain Sementara</span>
+            <input type="text" name="domain" value={form.domain} onChange={(event) => setForm({ ...form, domain: event.target.value })} placeholder="contoh: namadomain.asa17.com" required />
+          </label>
+
+          <label className="field">
+            <span>Tim Marketing</span>
+            <select name="user_id" value={form.user_id} onChange={(event) => { setForm({ ...form, user_id: event.target.value, nama: '' }); setClientMenuOpen(Boolean(event.target.value)); }} required>
+              <option value="">Pilih tim marketing</option>
+              {marketingUsers.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
+            </select>
+          </label>
+
+          <label className="field client-combobox" ref={comboboxRef}>
+            <span>Nama Klien</span>
+            <input type="search" name="nama" value={form.nama} onFocus={() => form.user_id && setClientMenuOpen(true)} onInput={() => form.user_id && setClientMenuOpen(true)} onChange={(event) => setForm({ ...form, nama: event.target.value })} placeholder="Pilih marketing dulu, lalu cari klien" autoComplete="off" />
+            <button type="button" className="combo-trigger" onClick={() => form.user_id && setClientMenuOpen((open) => !open)} aria-label="Tampilkan pilihan klien">▾</button>
+            <div className="client-menu" hidden={!clientMenuOpen || !form.user_id}>
+              {filteredClients.length ? filteredClients.map((client) => (
+                <button key={`${client.marketing_id}-${client.name}`} type="button" onClick={() => { setForm({ ...form, nama: client.name }); setClientMenuOpen(false); }}>
+                  {client.name}
+                </button>
+              )) : <div className="client-empty">Tidak ada klien yang cocok.</div>}
+            </div>
+          </label>
+
+          <label className="field">
+            <span>Tim Website</span>
+            <select name="tim_design_id" value={form.tim_design_id} onChange={(event) => setForm({ ...form, tim_design_id: event.target.value })}>
+              <option value="">--</option>
+              {websiteUsers.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
+            </select>
+          </label>
+
+          <label className="field">
+            <span>Sisa Pelunasan</span>
+            <input
+              type="text"
+              data-money-input
+              placeholder="Rp 0"
+              inputMode="numeric"
+              value={moneyInput}
+              onChange={(event) => {
+                const raw = event.target.value.replace(/\D/g, '');
+                setForm({ ...form, sisa_pelunasan: raw });
+                setMoneyInput(formatRupiah(raw));
+              }}
+            />
+            <input type="hidden" name="sisa_pelunasan" value={form.sisa_pelunasan} data-money-value />
+          </label>
+        </div>
+
+        <div className="form-actions">
+          <a className="ghost-button" href="/revisions" onClick={(event) => { event.preventDefault(); onBack(); }}>Back</a>
+          <button className="primary-button" type="submit">Save</button>
+        </div>
+      </form>
+    </section>
   );
 }
 
