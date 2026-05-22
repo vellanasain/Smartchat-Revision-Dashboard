@@ -59,8 +59,6 @@ func (h *Handler) marketingUsers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, users)
 }
 
-
-
 func (h *Handler) createBootstrap(w http.ResponseWriter, r *http.Request) {
 	result, err := h.repo.CreateBootstrap(r.Context())
 	if err != nil {

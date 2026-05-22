@@ -4,7 +4,22 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 )
+
+func formatRupiah(value int64) string {
+	if value <= 0 {
+		return "-"
+	}
+	raw := fmt.Sprintf("%d", value)
+	parts := []string{}
+	for len(raw) > 3 {
+		parts = append([]string{raw[len(raw)-3:]}, parts...)
+		raw = raw[:len(raw)-3]
+	}
+	parts = append([]string{raw}, parts...)
+	return "Rp " + strings.Join(parts, ".")
+}
 
 func (r *Repository) CreateBootstrap(ctx context.Context) (CreateBootstrapResult, error) {
 	marketing, err := r.MarketingUsers(ctx)
@@ -53,12 +68,6 @@ ORDER BY name`)
 }
 
 func (r *Repository) DetailBootstrap(ctx context.Context, id int64) (DetailBootstrapResult, error) {
-	result, err := r.ListRevisions(ctx, ListRevisionsParams{Page: 1, PerPage: 1})
-	if err != nil {
-		return DetailBootstrapResult{}, err
-	}
-	_ = result
-
 	row := r.db.QueryRowContext(ctx, `
 SELECT r.id, rg.domain, c.name, m.name, w.name,
 COALESCE(c.sisa_pelunasan, 0),
@@ -81,30 +90,55 @@ WHERE r.id = ?`, id)
 	}
 
 	wfRows, err := r.db.QueryContext(ctx, `SELECT jenis, COALESCE(response,''), COALESCE(notes,''), COALESCE(is_answered,0), COALESCE(is_collecting,0) FROM revisions WHERE revision_group_id = (SELECT revision_group_id FROM revisions WHERE id = ?)`, id)
-	if err != nil { return DetailBootstrapResult{}, err }
+	if err != nil {
+		return DetailBootstrapResult{}, err
+	}
 	defer wfRows.Close()
 	rowsMap := map[int]DetailBootstrapRow{}
 	for wfRows.Next() {
 		var jenis int
 		var stage, note string
 		var ans, coll int
-		if err := wfRows.Scan(&jenis, &stage, &note, &ans, &coll); err != nil { return DetailBootstrapResult{}, err }
+		if err := wfRows.Scan(&jenis, &stage, &note, &ans, &coll); err != nil {
+			return DetailBootstrapResult{}, err
+		}
 		work := ""
-		if ans == 1 { work = "done" } else if coll == 1 { work = "on_process" }
+		if ans == 1 {
+			work = "done"
+		} else if coll == 1 {
+			work = "on_process"
+		}
 		label := "Website sudah jadi"
-		if jenis > 0 { label = fmt.Sprintf("Revisi %d", jenis) }
+		if jenis > 0 {
+			label = fmt.Sprintf("Revisi %d", jenis)
+		}
 		rowsMap[jenis] = DetailBootstrapRow{Jenis: jenis, Label: label, Stage: stage, Work: work, Note: note}
 	}
 	rows := []DetailBootstrapRow{}
-	for i:=0;i<=3;i++ { if v,ok:=rowsMap[i]; ok { rows=append(rows,v) } else { label:="Website sudah jadi"; if i>0 {label=fmt.Sprintf("Revisi %d",i)}; rows=append(rows,DetailBootstrapRow{Jenis:i,Label:label}) } }
+	for i := 0; i <= 3; i++ {
+		if v, ok := rowsMap[i]; ok {
+			rows = append(rows, v)
+		} else {
+			label := "Website sudah jadi"
+			if i > 0 {
+				label = fmt.Sprintf("Revisi %d", i)
+			}
+			rows = append(rows, DetailBootstrapRow{Jenis: i, Label: label})
+		}
+	}
 
 	return DetailBootstrapResult{
-		CSRFToken:  "",
-		RevisionID: revID,
-		Domain:     domain,
-		ProjectInfo: map[string]string{"domain_sementara": domain, "nama_klien": client, "tim_marketing": marketing, "tim_web": web, "sisa_pelunasan": fmt.Sprintf("Rp %d", sisa), "status_pembayaran": status, "tanggal_pelunasan": tanggal},
-		ProjectNotes: map[string]string{"package_website": pkg, "biaya": biaya, "domain_resmi": domainResmi},
-		Rows: rows,
-		Options: map[string][]OptionItem{"stages": {{Value:"",Label:"--"},{Value:"waiting_client_data",Label:"Waiting Client Data"},{Value:"ready_to_revision",Label:"Ready to Revision"}}, "work": {{Value:"",Label:"--"},{Value:"not_started",Label:"Not Started"},{Value:"on_process",Label:"On Progress"},{Value:"done",Label:"Done"}}, "work_r0": {{Value:"",Label:"--"},{Value:"done",Label:"Done"}}},
+		CSRFToken:   "",
+		RevisionID:  revID,
+		Domain:      domain,
+		ProjectInfo: map[string]string{"domain_sementara": domain, "nama_klien": client, "tim_marketing": marketing, "tim_web": web, "sisa_pelunasan": formatRupiah(sisa), "status_pembayaran": status, "tanggal_pelunasan": tanggal},
+		ProjectNotes: map[string]string{"package_website": pkg, "biaya": func() string {
+			if biaya == "" {
+				return ""
+			}
+			return formatRupiah(func() int64 { var n int64; fmt.Sscan(biaya, &n); return n }())
+		}(), "domain_resmi": domainResmi},
+		Rows:    rows,
+		Options: map[string][]OptionItem{"stages": {{Value: "", Label: "--"}, {Value: "waiting_client_data", Label: "Waiting Client Data"}, {Value: "ready_to_revision", Label: "Ready to Revision"}}, "work": {{Value: "", Label: "--"}, {Value: "not_started", Label: "Not Started"}, {Value: "on_process", Label: "On Progress"}, {Value: "done", Label: "Done"}}, "work_r0": {{Value: "", Label: "--"}, {Value: "done", Label: "Done"}}},
 	}, nil
 }

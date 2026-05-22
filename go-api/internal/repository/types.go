@@ -64,13 +64,13 @@ type DetailBootstrapRow struct {
 }
 
 type DetailBootstrapResult struct {
-	CSRFToken   string            `json:"csrf_token"`
-	RevisionID  int64             `json:"revision_id"`
-	Domain      string            `json:"domain"`
-	ProjectInfo map[string]string `json:"project_info"`
-	ProjectNotes map[string]string `json:"project_notes"`
-	Rows        []DetailBootstrapRow `json:"rows"`
-	Options     map[string][]OptionItem `json:"options"`
+	CSRFToken    string                  `json:"csrf_token"`
+	RevisionID   int64                   `json:"revision_id"`
+	Domain       string                  `json:"domain"`
+	ProjectInfo  map[string]string       `json:"project_info"`
+	ProjectNotes map[string]string       `json:"project_notes"`
+	Rows         []DetailBootstrapRow    `json:"rows"`
+	Options      map[string][]OptionItem `json:"options"`
 }
 
 type CreateBootstrapResult struct {
