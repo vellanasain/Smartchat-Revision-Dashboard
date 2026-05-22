@@ -439,7 +439,8 @@ select:focus {
     padding: 16px 20px;
 }
 
-.filter-tabs a {
+.filter-tabs a,
+.filter-tabs button {
     display: inline-flex;
     align-items: center;
     min-height: 32px;
@@ -450,12 +451,22 @@ select:focus {
     color: var(--muted);
     font-weight: 800;
     font-size: 12px;
+    cursor: pointer;
 }
 
-.filter-tabs a.is-selected {
+.filter-tabs a.is-selected,
+.filter-tabs button.is-selected {
     border-color: var(--cyan);
     background: var(--cyan);
     color: #fff;
+}
+
+.pagination button.page-link {
+    cursor: pointer;
+}
+
+.pagination .disabled button.page-link {
+    cursor: not-allowed;
 }
 
 .revision-list {

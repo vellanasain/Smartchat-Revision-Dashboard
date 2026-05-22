@@ -22,11 +22,19 @@
                         class="smartchat-logo-img"
                     >
                 </a>
-                <a class="rail-nav-button is-active" href="{{ route('revisions.index', [], false) }}" title="Data revisi" aria-label="Data revisi">
+                <a class="rail-nav-button {{ request()->routeIs('revisions.*') ? 'is-active' : '' }}" href="{{ route('revisions.index', [], false) }}" title="Data revisi" aria-label="Data revisi">
                     <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
                         <ellipse cx="12" cy="5" rx="7" ry="3"></ellipse>
                         <path d="M5 5v6c0 1.7 3.1 3 7 3s7-1.3 7-3V5"></path>
                         <path d="M5 11v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"></path>
+                    </svg>
+                </a>
+                <a class="rail-nav-button {{ request()->routeIs('debug.*') ? 'is-active' : '' }}" href="{{ route('debug.logs', [], false) }}" title="Application Logs" aria-label="Application Logs">
+                    <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+                        <path d="M6 3h9l3 3v15H6z"></path>
+                        <path d="M14 3v4h4"></path>
+                        <path d="M9 11h6"></path>
+                        <path d="M9 15h6"></path>
                     </svg>
                 </a>
             </div>

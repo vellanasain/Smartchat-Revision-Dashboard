@@ -7,9 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class Conversation extends Model
 {
     protected $fillable = [
-        'judul',
-        'judul_admin',
-        'nama',
+        'name',
         'domain',
         'source',
         'notes',
@@ -46,5 +44,15 @@ class Conversation extends Model
     public function userInfo()
     {
         return $this->hasOne(UserInfo::class);
+    }
+
+    public function getNamaAttribute()
+    {
+        return $this->attributes['name'] ?? null;
+    }
+
+    public function setNamaAttribute($value): void
+    {
+        $this->attributes['name'] = $value;
     }
 }

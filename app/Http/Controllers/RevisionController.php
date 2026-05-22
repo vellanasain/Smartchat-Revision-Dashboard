@@ -8,6 +8,7 @@ use App\Models\RevisionGroup;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 
 class RevisionController extends Controller
 {
@@ -24,7 +25,8 @@ class RevisionController extends Controller
         'Tika',
         'Ingka',
         'Cindi',
-        'Chatbot',
+        'ptasainovasi',
+        'pteksadigital',
         'Dea',
         'Ika',
         'Sekar',
@@ -51,7 +53,7 @@ class RevisionController extends Controller
 
         $query = RevisionGroup::query()
             ->with([
-                'conversation:id,judul,nama,domain,source,user_id,tim_design_id,sisa_pelunasan,is_automate_pelunasan,tanggal_pelunasan,is_lunas,is_check_lunas,notes',
+                'conversation:id,name,user_id,tim_design_id,company_id,notes,end_session',
                 'conversation.marketing:id,name,role',
                 'conversation.timWebsite:id,name,role',
                 'conversation.userInfo:id,conversation_id,is_50_paid,is_paid,is_rev_0_done,is_rev_1_done,is_rev_2_done,is_rev_3_done',
@@ -70,7 +72,7 @@ class RevisionController extends Controller
             $query->whereHas('conversation', fn ($conversation) => $conversation->where('user_id', $selectedMarketingId));
         }
 
-        if ($selectedWebId) {
+        if ($selectedWebId && Schema::hasColumn('conversations', 'tim_design_id')) {
             $query->whereHas('conversation', fn ($conversation) => $conversation->where('tim_design_id', $selectedWebId));
         }
 
@@ -104,12 +106,10 @@ class RevisionController extends Controller
         ];
         $teamUsers = User::where('role', 'website')->orderBy('name')->get(['id', 'name']);
         $marketingUsers = User::query()
-            ->whereIn('id', Conversation::query()
-                ->select('user_id')
-                ->whereNotNull('user_id')
-                ->whereIn('id', RevisionGroup::query()->select('conversation_id')->whereNotNull('conversation_id')))
-            ->orderBy('name')
-            ->get(['id', 'name']);
+            ->whereIn(DB::raw('LOWER(name)'), array_map('strtolower', $this->marketingNames))
+            ->get(['id', 'name'])
+            ->sortBy(fn ($user) => array_search(strtolower($user->name), array_map('strtolower', $this->marketingNames)))
+            ->values();
 
         return view('revisions.index', compact(
             'groups',
@@ -130,10 +130,7 @@ class RevisionController extends Controller
         $query->where(function ($builder) use ($like) {
             $builder->whereRaw('LOWER(revision_groups.domain) LIKE ? ESCAPE "\\\\"', [$like])
                 ->orWhereHas('conversation', function ($conversation) use ($like) {
-                    $conversation->whereRaw('LOWER(judul) LIKE ? ESCAPE "\\\\"', [$like])
-                        ->orWhereRaw('LOWER(nama) LIKE ? ESCAPE "\\\\"', [$like])
-                        ->orWhereRaw('LOWER(domain) LIKE ? ESCAPE "\\\\"', [$like])
-                        ->orWhereRaw('LOWER(source) LIKE ? ESCAPE "\\\\"', [$like])
+                    $conversation->whereRaw('LOWER(name) LIKE ? ESCAPE "\\\\"', [$like])
                         ->orWhereRaw('LOWER(notes) LIKE ? ESCAPE "\\\\"', [$like])
                         ->orWhereHas('marketing', function ($user) use ($like) {
                             $user->whereRaw('LOWER(name) LIKE ? ESCAPE "\\\\"', [$like]);
@@ -164,12 +161,12 @@ class RevisionController extends Controller
             ->sortBy(fn ($user) => array_search(strtolower($user->name), array_map('strtolower', $this->marketingNames)))
             ->values();
         $clients = Conversation::query()
-            ->whereNotNull('nama')
-            ->where('nama', '<>', '')
+            ->whereNotNull('name')
+            ->where('name', '<>', '')
             ->whereIn('user_id', $marketingUsers->pluck('id'))
-            ->select('user_id', 'nama')
+            ->select('user_id', 'name')
             ->distinct()
-            ->orderBy('nama')
+            ->orderBy('name')
             ->get();
 
         return view('revisions.create', compact('teamUsers', 'marketingUsers', 'clients'));
@@ -187,14 +184,10 @@ class RevisionController extends Controller
 
         DB::transaction(function () use ($data) {
             $conversation = Conversation::create([
-                'judul' => substr(md5($data['domain'].microtime(true)), 0, 8),
-                'domain' => $data['domain'],
-                'nama' => $data['nama'] ?? null,
+                'name' => $data['nama'] ?? null,
                 'user_id' => $data['user_id'],
                 'tim_design_id' => $data['tim_design_id'] ?? null,
-                'source' => 'Website Channel',
                 'company_id' => 1,
-                'sisa_pelunasan' => $data['sisa_pelunasan'] ?? null,
             ]);
 
             $group = RevisionGroup::create([
@@ -223,9 +216,11 @@ class RevisionController extends Controller
             'tim_design_id' => 'nullable|integer|exists:users,id',
         ]);
 
-        $group->conversation?->update([
-            'tim_design_id' => $data['tim_design_id'] ?? null,
-        ]);
+        if (Schema::hasColumn('conversations', 'tim_design_id')) {
+            $group->conversation?->update([
+                'tim_design_id' => $data['tim_design_id'] ?? null,
+            ]);
+        }
 
         return redirect()->route('revisions.index', $request->only(['q', 'filter', 'marketing_id', 'web_id']))->with('success', 'Tim web berhasil diperbarui.');
     }
@@ -245,7 +240,7 @@ class RevisionController extends Controller
     public function edit($id)
     {
         $revision = Revision::with([
-            'conversation:id,judul,nama,domain,source,user_id,tim_design_id,sisa_pelunasan,is_automate_pelunasan,tanggal_pelunasan,is_lunas,is_check_lunas,notes',
+            'conversation:id,name,user_id,tim_design_id,company_id,notes,end_session',
             'conversation.marketing:id,name,role',
             'conversation.timWebsite:id,name,role',
             'conversation.userInfo:id,conversation_id,is_50_paid,is_paid,is_rev_0_done,is_rev_1_done,is_rev_2_done,is_rev_3_done,package,monthly_bill,domain',

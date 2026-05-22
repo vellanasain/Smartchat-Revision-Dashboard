@@ -1,0 +1,10 @@
+/vendor/
+/node_modules/
+/react-app/node_modules/
+/react-app/dist/
+/tmp/
+/storage/framework/cache/
+/storage/framework/sessions/
+/storage/framework/views/
+/storage/logs/*.log
+/.env
