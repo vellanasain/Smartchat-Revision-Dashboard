@@ -3,6 +3,7 @@ package httpapi
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"website-revision-system/go-api/internal/config"
 	"website-revision-system/go-api/internal/repository"
@@ -26,7 +27,7 @@ func (h *Handler) Routes() http.Handler {
 	mux.HandleFunc("GET /api/debug/logs", h.logs)
 	mux.HandleFunc("GET /api/revisions/create-bootstrap", h.createBootstrap)
 	mux.HandleFunc("GET /api/revisions/{id}/detail-bootstrap", h.detailBootstrap)
-	return h.cors(mux)
+	return h.cors(h.trustBoundary(mux))
 }
 
 func (h *Handler) health(w http.ResponseWriter, r *http.Request) {
@@ -87,28 +88,42 @@ func (h *Handler) websiteUsers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, users)
 }
 
-func (h *Handler) cors(next http.Handler) http.Handler {
+func (h *Handler) trustBoundary(next http.Handler) http.Handler {
+	sharedKey := strings.TrimSpace(h.cfg.TrustProxySharedKey)
+	if sharedKey == "" {
+		return next
+	}
+
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		origin := r.Header.Get("Origin")
-
-		allowedOrigins := map[string]bool{
-			"http://127.0.0.1:5173": true,
-			"http://localhost:5173": true,
+		if strings.HasPrefix(r.URL.Path, "/api/") && r.URL.Path != "/api/health" {
+			if r.Header.Get("X-Trusted-Proxy") != "1" || r.Header.Get("X-Auth-Signature") != sharedKey {
+				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "untrusted proxy boundary"})
+				return
+			}
 		}
+		next.ServeHTTP(w, r)
+	})
+}
 
+func (h *Handler) cors(next http.Handler) http.Handler {
+	allowedOrigins := map[string]bool{
+		"http://127.0.0.1:5173": true,
+		"http://localhost:5173": true,
+	}
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// hard reset any upstream/default CORS headers to avoid wildcard leaks
+		w.Header().Del("Access-Control-Allow-Origin")
+		w.Header().Del("Access-Control-Allow-Credentials")
+		origin := r.Header.Get("Origin")
 		if allowedOrigins[origin] {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
+			w.Header().Set("Vary", "Origin")
+			w.Header().Set("X-Cors-Policy", "go-explicit-origin-v1")
 		}
-
 		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
-		w.Header().Set(
-			"Access-Control-Allow-Headers",
-			"Content-Type, Authorization, X-Requested-With, X-Trusted-Proxy, X-Auth-Signature",
-		)
-
-		w.Header().Set("X-Cors-Policy", "go-explicit-origin-v1")
-
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, X-Trusted-Proxy, X-Auth-Signature")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return

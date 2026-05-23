@@ -2,11 +2,12 @@ const API_BASE = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8081/api';
 const LARAVEL_FALLBACK_BASE = import.meta.env.VITE_LARAVEL_API_BASE || '/api';
 const PARITY_VERIFY = (import.meta.env.VITE_PARITY_VERIFY || '1') === '1';
 
-function shapeOf(value) {
-  if (value === null || value === undefined) return 'null';
-  if (Array.isArray(value)) return 'array';
-  return typeof value;
-}
+const DEV_LARAVEL_CANDIDATES = [
+  'http://127.0.0.1:8080/api',
+  'http://localhost:8080/api',
+  'http://127.0.0.1:8000/api',
+  'http://localhost:8000/api',
+];
 
 function collectShape(obj, prefix = '', out = {}) {
   if (obj === null || obj === undefined) {
@@ -56,34 +57,48 @@ function verifyParity(path, goPayload, laravelPayload) {
 }
 
 export async function fetchJSON(path) {
-  const goURL = `${API_BASE}${path}`;
-  const laravelURL = `${LARAVEL_FALLBACK_BASE}${path}`;
+  const bases = [API_BASE, LARAVEL_FALLBACK_BASE, ...DEV_LARAVEL_CANDIDATES].filter(Boolean);
+  const seen = new Set();
+  let lastError = null;
 
-  const goFetch = fetch(goURL, { credentials: 'include' });
-  const laravelFetch = PARITY_VERIFY ? fetch(laravelURL, { credentials: 'include' }).catch(() => null) : null;
+  for (const base of bases) {
+    if (seen.has(base)) continue;
+    seen.add(base);
 
-  try {
-    const response = await goFetch;
-    if (!response.ok) throw new Error(`Request failed: ${response.status}`);
-    const goPayload = await response.json();
+    const url = `${base}${path}`;
+    try {
+      const response = await fetch(url, { credentials: 'include' });
+      if (!response.ok) {
+        const body = await response.text();
+        throw new Error(body || `Request failed: ${response.status}`);
+      }
 
-    if (PARITY_VERIFY && laravelFetch) {
-      laravelFetch.then(async (fallbackResponse) => {
-        if (!fallbackResponse || !fallbackResponse.ok) return;
-        const laravelPayload = await fallbackResponse.json();
-        verifyParity(path, goPayload, laravelPayload);
-      }).catch(() => {});
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        const body = await response.text();
+        throw new Error(`Non-JSON response from ${url}: ${body.slice(0, 120)}`);
+      }
+
+      const payload = await response.json();
+
+      if (PARITY_VERIFY && base === API_BASE && /^\/revisions/.test(path)) {
+        fetch(`${LARAVEL_FALLBACK_BASE}${path}`, { credentials: 'include' })
+          .then(async (fallbackResponse) => {
+            if (!fallbackResponse.ok) return;
+            if (!(fallbackResponse.headers.get('content-type') || '').includes('application/json')) return;
+            const laravelPayload = await fallbackResponse.json();
+            verifyParity(path, payload, laravelPayload);
+          })
+          .catch(() => {});
+      }
+
+      return payload;
+    } catch (error) {
+      lastError = error;
     }
-
-    return goPayload;
-  } catch (goError) {
-    const fallbackResponse = await fetch(laravelURL, { credentials: 'include' });
-    if (!fallbackResponse.ok) {
-      const body = await fallbackResponse.text();
-      throw new Error(body || goError.message || `Request failed: ${fallbackResponse.status}`);
-    }
-    return fallbackResponse.json();
   }
+
+  throw lastError || new Error('Request failed');
 }
 
 export function money(value) {
