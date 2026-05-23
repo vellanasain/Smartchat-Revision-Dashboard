@@ -42,12 +42,12 @@ export function App() {
     }
   };
 
-  const detailMatch = path.match(/^\/revisions\/(\d+)$/);
+  const detailMatch = path.match(/^\/revisions\/(\d+)(?:\/edit)?$/);
   const title = path === '/debug/logs' ? 'Application Logs' : path === '/revisions/create' ? 'Tambah Revisi Baru' : detailMatch ? 'Detail Revisi' : 'Daftar Revisi Website';
 
   return (
     <AppShell theme={theme} setTheme={setTheme} title={title} path={path} navigate={navigate}>
-      {path === '/debug/logs' ? <LogsPage /> : path === '/revisions/create' ? <CreateRevisionPage onBack={() => navigate('/revisions')} /> : detailMatch ? <DetailRevisionPage revisionId={Number(detailMatch[1])} onBack={() => navigate('/revisions')} /> : <RevisionsPage onCreate={() => navigate('/revisions/create')} onOpenDetail={(revisionId) => navigate(`/revisions/${revisionId}`)} />}
+      {path === '/debug/logs' ? <LogsPage /> : path === '/revisions/create' ? <CreateRevisionPage onBack={() => navigate('/revisions')} /> : detailMatch ? <DetailRevisionPage revisionId={Number(detailMatch[1])} onBack={() => navigate('/revisions')} /> : <RevisionsPage onCreate={() => navigate('/revisions/create')} onOpenDetail={(revisionId) => navigate(`/revisions/${revisionId}/edit`)} />}
     </AppShell>
   );
 }
