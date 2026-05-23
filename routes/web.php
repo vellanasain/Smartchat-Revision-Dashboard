@@ -12,4 +12,6 @@ Route::post('/revisions', [RevisionController::class, 'store'])->name('revisions
 Route::patch('/revision-groups/{group}/team', [RevisionController::class, 'updateTeam'])->name('revision-groups.team');
 Route::delete('/revision-groups/{group}', [RevisionController::class, 'destroyGroup'])->name('revision-groups.destroy');
 Route::get('/revisions/{id}/edit', [RevisionController::class, 'edit'])->name('revisions.edit');
+Route::get('/api/revisions/create-bootstrap', [RevisionController::class, 'createBootstrap'])->name('revisions.create-bootstrap');
+Route::get('/api/revisions/{id}/detail-bootstrap', [RevisionController::class, 'detailBootstrap'])->name('revisions.detail-bootstrap');
 Route::put('/revisions/{id}', [RevisionController::class, 'update'])->name('revisions.update');
