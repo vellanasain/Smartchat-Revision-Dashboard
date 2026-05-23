@@ -1,3 +1,4 @@
+import React from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { fetchJSON } from './lib/api';
 import { AppShell } from './layout/AppShell';
