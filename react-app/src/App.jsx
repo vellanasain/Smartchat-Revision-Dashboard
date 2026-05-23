@@ -69,32 +69,37 @@ export function App() {
     }
   };
 
-  const detailMatch = path.match(/^\/revisions\/(\d+)\/edit$/);
-  const legacyDetailMatch = path.match(/^\/revisions\/(\d+)$/);
-  const detailRevisionId = Number((detailMatch || legacyDetailMatch || [])[1] || 0);
+  const normalizedPath = (path || '/revisions').replace(/\/+$/, '') || '/revisions';
+  const detailMatch = normalizedPath.match(/^\/revisions\/(\d+)(?:\/edit)?$/);
+  const detailRevisionId = Number(detailMatch?.[1] || 0);
 
-  const title = path === '/debug/logs'
+  const title = normalizedPath === '/debug/logs'
     ? 'Application Logs'
-    : path === '/revisions/create'
+    : normalizedPath === '/revisions/create'
       ? 'Tambah Revisi Baru'
-      : detailRevisionId
+      : detailRevisionId > 0
         ? 'Detail Revisi'
         : 'Daftar Revisi Website';
 
-  return (
-    <AppShell theme={theme} setTheme={setTheme} title={title} path={path} navigate={navigate}>
-      {path === '/debug/logs' && <LogsPage />}
-      {path === '/revisions/create' && <CreateRevisionPage onBack={() => navigate('/revisions')} />}
-      {detailRevisionId > 0 && <DetailRevisionPage revisionId={detailRevisionId} onBack={() => navigate('/revisions')} />}
-      {!path.startsWith('/debug/logs') && path !== '/revisions/create' && detailRevisionId === 0 && (
-        <RevisionsPage
-          onCreate={() => navigate('/revisions/create')}
-          onOpenDetail={(revisionId) => navigate(`/revisions/${revisionId}/edit`)}
-        />
-      )}
-    </AppShell>
-  );
+  let pageContent;
+  if (normalizedPath === '/debug/logs') {
+    pageContent = <LogsPage />;
+  } else if (normalizedPath === '/revisions/create') {
+    pageContent = <CreateRevisionPage onBack={() => navigate('/revisions')} />;
+  } else if (detailRevisionId > 0) {
+    pageContent = <DetailRevisionPage revisionId={detailRevisionId} onBack={() => navigate('/revisions')} />;
+  } else {
+    pageContent = (
+      <RevisionsPage
+        onCreate={() => navigate('/revisions/create')}
+        onOpenDetail={(revisionId) => navigate(`/revisions/${revisionId}/edit`)}
+      />
+    );
+  }
+
+  return <AppShell theme={theme} setTheme={setTheme} title={title} path={normalizedPath} navigate={navigate}>{pageContent}</AppShell>;
 }
+
 
 function RevisionsPage({ onCreate, onOpenDetail }) {
   const [data, setData] = useState(null);
