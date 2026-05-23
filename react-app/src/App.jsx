@@ -72,6 +72,7 @@ function RevisionsPage({ onCreate, onOpenDetail }) {
   useEffect(() => {
     let alive = true;
     setLoading(true);
+    setError('');
     fetchJSON(`/revisions?${queryString}`)
       .then((payload) => alive && setData(payload))
       .catch((err) => alive && setError(err.message))
