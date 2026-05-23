@@ -49,3 +49,35 @@ type ListRevisionsResult struct {
 	TotalItems int64              `json:"total_items"`
 	TotalPages int                `json:"total_pages"`
 }
+
+type OptionItem struct {
+	Value string `json:"value"`
+	Label string `json:"label"`
+}
+
+type DetailBootstrapRow struct {
+	Jenis int    `json:"jenis"`
+	Label string `json:"label"`
+	Stage string `json:"stage"`
+	Work  string `json:"work"`
+	Note  string `json:"note"`
+}
+
+type DetailBootstrapResult struct {
+	CSRFToken    string                  `json:"csrf_token"`
+	RevisionID   int64                   `json:"revision_id"`
+	Domain       string                  `json:"domain"`
+	ProjectInfo  map[string]string       `json:"project_info"`
+	ProjectNotes map[string]string       `json:"project_notes"`
+	Rows         []DetailBootstrapRow    `json:"rows"`
+	Options      map[string][]OptionItem `json:"options"`
+}
+
+type CreateBootstrapResult struct {
+	CSRFToken      string            `json:"csrf_token"`
+	MarketingUsers []User            `json:"marketing_users"`
+	WebsiteUsers   []User            `json:"website_users"`
+	Clients        []map[string]any  `json:"clients"`
+	Defaults       map[string]string `json:"defaults"`
+	Error          string            `json:"error"`
+}

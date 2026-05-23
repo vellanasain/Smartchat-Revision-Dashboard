@@ -8,13 +8,14 @@ import (
 )
 
 type Config struct {
-	HTTPAddr string
-	DBHost   string
-	DBPort   string
-	DBName   string
-	DBUser   string
-	DBPass   string
-	RootDir  string
+	HTTPAddr            string
+	DBHost              string
+	DBPort              string
+	DBName              string
+	DBUser              string
+	DBPass              string
+	RootDir             string
+	TrustProxySharedKey string
 }
 
 func Load() Config {
@@ -22,13 +23,14 @@ func Load() Config {
 	env := readEnv(filepath.Join(root, ".env"))
 
 	return Config{
-		HTTPAddr: value(env, "GO_API_ADDR", "127.0.0.1:8081"),
-		DBHost:   value(env, "DB_HOST", "127.0.0.1"),
-		DBPort:   value(env, "DB_PORT", "3306"),
-		DBName:   value(env, "DB_DATABASE", ""),
-		DBUser:   value(env, "DB_USERNAME", "root"),
-		DBPass:   value(env, "DB_PASSWORD", ""),
-		RootDir:  root,
+		HTTPAddr:            value(env, "GO_API_ADDR", "127.0.0.1:8081"),
+		DBHost:              value(env, "DB_HOST", "127.0.0.1"),
+		DBPort:              value(env, "DB_PORT", "3306"),
+		DBName:              value(env, "DB_DATABASE", ""),
+		DBUser:              value(env, "DB_USERNAME", "root"),
+		DBPass:              value(env, "DB_PASSWORD", ""),
+		RootDir:             root,
+		TrustProxySharedKey: value(env, "TRUST_PROXY_SHARED_KEY", ""),
 	}
 }
 
