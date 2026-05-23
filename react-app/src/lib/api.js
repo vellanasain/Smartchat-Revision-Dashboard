@@ -1,8 +1,9 @@
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8081/api';
-const LARAVEL_FALLBACK_BASE = import.meta.env.VITE_LARAVEL_API_BASE || '/api';
+const LARAVEL_FALLBACK_BASE = import.meta.env.VITE_LARAVEL_API_BASE || 'http://127.0.0.1:8080/api';
 const PARITY_VERIFY = (import.meta.env.VITE_PARITY_VERIFY || '1') === '1';
 
 const DEV_LARAVEL_CANDIDATES = [
+  '/api',
   'http://127.0.0.1:8080/api',
   'http://localhost:8080/api',
   'http://127.0.0.1:8000/api',
@@ -57,7 +58,10 @@ function verifyParity(path, goPayload, laravelPayload) {
 }
 
 export async function fetchJSON(path) {
-  const bases = [API_BASE, LARAVEL_FALLBACK_BASE, ...DEV_LARAVEL_CANDIDATES].filter(Boolean);
+  const preferLaravel = /^\/revisions\/\d+\/detail-bootstrap$/.test(path);
+  const bases = (preferLaravel
+    ? [LARAVEL_FALLBACK_BASE, ...DEV_LARAVEL_CANDIDATES, API_BASE]
+    : [API_BASE, LARAVEL_FALLBACK_BASE, ...DEV_LARAVEL_CANDIDATES]).filter(Boolean);
   const seen = new Set();
   let lastError = null;
 
