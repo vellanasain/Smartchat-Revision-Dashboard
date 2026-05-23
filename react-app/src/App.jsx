@@ -29,6 +29,33 @@ export function App() {
     localStorage.setItem('revision-theme', theme);
   }, [theme]);
 
+  return (
+    <div className="app-shell">
+      <aside className="rail" aria-label="Navigasi utama">
+        <div className="rail-top">
+          <a className="rail-logo" href="#" aria-label="Smartchat">
+            <img src="/public/logo-smartchat.webp" alt="Smartchat Logo" className="smartchat-logo-img" />
+          </a>
+          <a className={`rail-nav-button ${view === 'revisions' ? 'is-active' : ''}`} href="#" onClick={(event) => { event.preventDefault(); setView('revisions'); }} title="Data revisi" aria-label="Data revisi">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5" rx="7" ry="3" /><path d="M5 5v6c0 1.7 3.1 3 7 3s7-1.3 7-3V5" /><path d="M5 11v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6" /></svg>
+          </a>
+          <a className={`rail-nav-button ${view === 'logs' ? 'is-active' : ''}`} href="#" onClick={(event) => { event.preventDefault(); setView('logs'); }} title="Application Logs" aria-label="Application Logs">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l3 3v15H6z" /><path d="M14 3v4h4" /><path d="M9 11h6" /><path d="M9 15h6" /></svg>
+          </a>
+        </div>
+        <div className="rail-bottom">
+          <button className="rail-nav-button theme-switch" type="button" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} aria-label="Ganti mode gelap terang" title="Ganti mode">
+            <span className="theme-icon theme-icon-sun" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4 12H2M22 12h-2M5 5l1.5 1.5M17.5 17.5 19 19M19 5l-1.5 1.5M6.5 17.5 5 19" /></svg></span>
+            <span className="theme-icon theme-icon-moon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a7 7 0 1 0 10.5 10.5Z" /></svg></span>
+          </button>
+          <button className="rail-nav-button" type="button" aria-label="Pengaturan" title="Pengaturan">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5Z" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1A2 2 0 1 1 4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7A2 2 0 1 1 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3h.1a1.7 1.7 0 0 0 .9-1.6V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1A2 2 0 1 1 19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9v.1a1.7 1.7 0 0 0 1.6.9h.1a2 2 0 0 1 0 4H21a1.7 1.7 0 0 0-1.6 1Z" /></svg>
+          </button>
+          <button className="rail-nav-button logout-button" type="button" aria-label="Logout" title="Logout">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-2" /><path d="M10 12h10" /><path d="m17 9 3 3-3 3" /></svg>
+          </button>
+        </div>
+      </aside>
   useEffect(() => {
     const onPop = () => setPath(window.location.pathname || '/revisions');
     window.addEventListener('popstate', onPop);
