@@ -5,6 +5,20 @@ import { filters, readParamsFromURL, writeParamsToURL } from './utils/revisions'
 import { Metric, RevisionRow } from './components/RevisionsTable';
 import { Pagination } from './components/Pagination';
 
+function buildPageItems(currentPage, totalPages) {
+  const pages = new Set([1, totalPages]);
+  for (let page = currentPage - 1; page <= currentPage + 1; page++) {
+    if (page >= 1 && page <= totalPages) pages.add(page);
+  }
+  const sortedPages = [...pages].sort((a, b) => a - b);
+  const items = [];
+  for (let index = 0; index < sortedPages.length; index++) {
+    const page = sortedPages[index];
+    if (index > 0 && page - sortedPages[index - 1] > 1) items.push('...');
+    items.push(page);
+  }
+  return items;
+}
 export function App() {
   const [theme, setTheme] = useState(localStorage.getItem('revision-theme') || 'dark');
   const [path, setPath] = useState(() => window.location.pathname || '/revisions');
