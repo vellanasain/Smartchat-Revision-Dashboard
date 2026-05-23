@@ -1,10 +1,38 @@
-import React from 'react';
+import React from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { fetchJSON } from './lib/api';
-import { AppShell } from './layout/AppShell';
-import { filters, readParamsFromURL, writeParamsToURL } from './utils/revisions';
-import { Metric, RevisionRow } from './components/RevisionsTable';
-import { Pagination } from './components/Pagination';
+import { fetchJSON, money } from './lib/api';
+
+const filters = [
+  ['all', 'Semua'],
+  ['unpaid', 'Belum Lunas'],
+  ['process_revision', 'Proses Revisi'],
+  ['revision_done', 'Revisi Sudah Selesai'],
+];
+
+function readParamsFromURL() {
+  const query = new URLSearchParams(window.location.search);
+  return {
+    q: query.get('q') || '',
+    filter: query.get('filter') || 'all',
+    marketing_id: query.get('marketing_id') || '',
+    web_id: query.get('web_id') || '',
+    page: Math.max(1, Number(query.get('page') || 1) || 1),
+  };
+}
+
+function writeParamsToURL(params) {
+  const query = new URLSearchParams();
+  if (params.filter && params.filter !== 'all') query.set('filter', params.filter);
+  if (params.q) query.set('q', params.q);
+  if (params.marketing_id) query.set('marketing_id', params.marketing_id);
+  if (params.web_id) query.set('web_id', params.web_id);
+  if (params.page && params.page > 1) query.set('page', String(params.page));
+  const queryString = query.toString();
+  const nextURL = `${window.location.pathname}${queryString ? `?${queryString}` : ''}`;
+  window.history.pushState({}, '', nextURL);
+}
+
+
 
 function buildPageItems(currentPage, totalPages) {
   const pages = new Set([1, totalPages]);
@@ -22,7 +50,8 @@ function buildPageItems(currentPage, totalPages) {
 }
 export function App() {
   const [theme, setTheme] = useState(localStorage.getItem('revision-theme') || 'dark');
-  const [path, setPath] = useState(() => window.location.pathname || '/revisions');
+  const [view, setView] = useState(() => (window.location.pathname === '/revisions/create' ? 'create' : 'revisions'));
+  const [activeRevisionId, setActiveRevisionId] = useState(null);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -95,7 +124,6 @@ function RevisionsPage({ onCreate, onOpenDetail }) {
   useEffect(() => {
     let alive = true;
     setLoading(true);
-    setError('');
     fetchJSON(`/revisions?${queryString}`)
       .then((payload) => alive && setData(payload))
       .catch((err) => alive && setError(err.message))
@@ -202,6 +230,78 @@ function RevisionsPage({ onCreate, onOpenDetail }) {
   );
 }
 
+function Metric({ title, value }) {
+  return <article className="metric-card"><span>{title}</span><strong>{new Intl.NumberFormat('id-ID').format(value || 0)}</strong></article>;
+}
+
+function RevisionRow({ item, onOpenDetail }) {
+  return (
+    <tr>
+      <td className="domain-column"><strong>{item.domain || '-'}</strong></td>
+      <td>{item.client_name || '-'}</td>
+      <td>{item.marketing_name || '-'}</td>
+      <td>{item.web_name || '--'}</td>
+      <td><span className="revision-code">{item.revision_label}</span><small>{item.revision_helper}</small></td>
+      <td>{money(item.remaining_payment)}</td>
+      <td><span className={`payment-pill ${item.payment_class}`}>{item.payment_label}</span></td>
+      <td>{item.active_period || '-'}</td>
+      <td>
+        <div className="action-buttons">
+          {item.revision_id ? <a className="action-button detail" href={`/revisions/${item.revision_id}/edit`} onClick={(event) => { event.preventDefault(); onOpenDetail(item.revision_id); }} aria-label={`Detail revisi ${item.domain || "-"}`} title="Detail"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9" /><path d="m16.5 3.5 4 4L8 20H4v-4L16.5 3.5Z" /></svg></a> : <span className="action-button detail is-disabled" aria-label="Detail tidak tersedia"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9" /><path d="m16.5 3.5 4 4L8 20H4v-4L16.5 3.5Z" /></svg></span>}
+          <button className="action-button delete" type="button" aria-label="Hapus"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v5" /><path d="M14 11v5" /></svg></button>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+function Pagination({ page, totalPages, totalItems, perPage, onPage }) {
+  if (totalPages <= 1) return null;
+
+  const start = totalItems === 0 ? 0 : (page - 1) * perPage + 1;
+  const end = Math.min(page * perPage, totalItems);
+  const items = buildPageItems(page, totalPages);
+
+  return (
+    <div className="pagination-wrap">
+      <nav className="clean-pagination" role="navigation" aria-label="Pagination">
+        <p className="pagination-summary">Showing {start} to {end} of {totalItems} results</p>
+        <ul className="pagination">
+          <li className={`page-item ${page <= 1 ? 'disabled' : ''}`}>
+            {page <= 1 ? (
+              <span className="page-link" aria-hidden="true">&lsaquo;</span>
+            ) : (
+              <a className="page-link" href="#" rel="prev" aria-label="Halaman sebelumnya" onClick={(event) => { event.preventDefault(); onPage(page - 1); }}>&lsaquo;</a>
+            )}
+          </li>
+
+          {items.map((item, index) => (
+            <li key={`${item}-${index}`} className={`page-item ${item === '...' ? 'disabled' : item === page ? 'active' : ''}`}>
+              {item === '...' ? (
+                <span className="page-link">...</span>
+              ) : item === page ? (
+                <span className="page-link">{item}</span>
+              ) : (
+                <a className="page-link" href="#" onClick={(event) => { event.preventDefault(); onPage(item); }}>{item}</a>
+              )}
+            </li>
+          ))}
+
+          <li className={`page-item ${page >= totalPages ? 'disabled' : ''}`}>
+            {page >= totalPages ? (
+              <span className="page-link" aria-hidden="true">&rsaquo;</span>
+            ) : (
+              <a className="page-link" href="#" rel="next" aria-label="Halaman berikutnya" onClick={(event) => { event.preventDefault(); onPage(page + 1); }}>&rsaquo;</a>
+            )}
+          </li>
+        </ul>
+      </nav>
+    </div>
+  );
+}
+
+
+
 function DetailRevisionPage({ revisionId, onBack }) {
   const [csrfToken, setCsrfToken] = useState('');
   const [error, setError] = useState('');
@@ -214,10 +314,8 @@ function DetailRevisionPage({ revisionId, onBack }) {
 
   useEffect(() => {
     if (!revisionId) return;
-    let alive = true;
     fetchJSON(`/revisions/${revisionId}/detail-bootstrap`)
       .then((payload) => {
-        if (!alive) return;
         setCsrfToken(payload.csrf_token || '');
         setError('');
         setDomain(payload.domain || '-');
@@ -226,8 +324,7 @@ function DetailRevisionPage({ revisionId, onBack }) {
         setProjectInfo(payload.project_info || { domain_sementara: '-', nama_klien: '-', tim_marketing: '-', tim_web: '--', sisa_pelunasan: '-', status_pembayaran: '-', tanggal_pelunasan: '-' });
         setOptions(payload.options || { stages: [], work: [], work_r0: [] });
       })
-      .catch(() => alive && setError('Gagal memuat detail revisi.'));
-    return () => { alive = false; };
+      .catch(() => setError('Gagal memuat detail revisi.'));
   }, [revisionId]);
 
   if (!revisionId) return <section className="form-page"><div className="alert alert-danger">Detail revisi tidak tersedia.</div></section>;
@@ -294,10 +391,8 @@ function CreateRevisionPage({ onBack }) {
   const comboboxRef = useRef(null);
 
   useEffect(() => {
-    let alive = true;
     fetchJSON('/revisions/create-bootstrap')
       .then((payload) => {
-        if (!alive) return;
         setCsrfToken(payload.csrf_token || '');
         setMarketingUsers(payload.marketing_users || []);
         setWebsiteUsers(payload.website_users || []);
@@ -315,7 +410,6 @@ function CreateRevisionPage({ onBack }) {
         setError(payload.error || '');
       })
       .catch(() => {});
-    return () => { alive = false; };
   }, []);
 
   useEffect(() => {
@@ -340,11 +434,6 @@ function CreateRevisionPage({ onBack }) {
     .slice(0, 80);
 
   const onSubmit = (event) => {
-    if (!csrfToken) {
-      event.preventDefault();
-      setError('Token keamanan belum siap. Coba beberapa detik lagi.');
-      return;
-    }
     if (!form.domain || !form.user_id) {
       event.preventDefault();
       setError('Domain sementara dan tim marketing wajib diisi.');
