@@ -3,6 +3,7 @@ package httpapi
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"website-revision-system/go-api/internal/config"
 	"website-revision-system/go-api/internal/repository"
@@ -26,7 +27,7 @@ func (h *Handler) Routes() http.Handler {
 	mux.HandleFunc("GET /api/debug/logs", h.logs)
 	mux.HandleFunc("GET /api/revisions/create-bootstrap", h.createBootstrap)
 	mux.HandleFunc("GET /api/revisions/{id}/detail-bootstrap", h.detailBootstrap)
-	return h.cors(mux)
+	return h.cors(h.trustBoundary(mux))
 }
 
 func (h *Handler) health(w http.ResponseWriter, r *http.Request) {
@@ -85,6 +86,23 @@ func (h *Handler) websiteUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, users)
+}
+
+func (h *Handler) trustBoundary(next http.Handler) http.Handler {
+	sharedKey := strings.TrimSpace(h.cfg.TrustProxySharedKey)
+	if sharedKey == "" {
+		return next
+	}
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/") && r.URL.Path != "/api/health" {
+			if r.Header.Get("X-Trusted-Proxy") != "1" || r.Header.Get("X-Auth-Signature") != sharedKey {
+				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "untrusted proxy boundary"})
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (h *Handler) cors(next http.Handler) http.Handler {

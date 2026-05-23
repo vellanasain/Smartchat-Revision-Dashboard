@@ -1,0 +1,43 @@
+version: '3.9'
+services:
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - ./ops/nginx/hybrid.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - laravel
+      - go-api
+      - react-app
+
+  laravel:
+    image: php:8.2-cli
+    working_dir: /app
+    command: sh -lc "php artisan serve --host=0.0.0.0 --port=8000"
+    volumes:
+      - ./:/app
+    environment:
+      APP_ENV: local
+      APP_URL: http://localhost:8080
+
+  go-api:
+    image: golang:1.23-alpine
+    working_dir: /app/go-api
+    command: sh -lc "go run ./cmd/server"
+    volumes:
+      - ./:/app
+    environment:
+      HTTP_ADDR: 0.0.0.0:8081
+      TRUST_PROXY_SHARED_KEY: dev-shared-key
+
+  react-app:
+    image: node:20-alpine
+    working_dir: /app/react-app
+    command: sh -lc "npm install && npm run dev -- --host 0.0.0.0 --port 5173"
+    volumes:
+      - ./:/app
+    environment:
+      VITE_API_BASE: /go-api/api
+      VITE_LARAVEL_API_BASE: /api
+      VITE_PARITY_VERIFY: '1'
