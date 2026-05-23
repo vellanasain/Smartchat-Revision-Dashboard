@@ -42,15 +42,37 @@ export function App() {
     }
   };
 
-  const detailMatch = path.match(/^\/revisions\/(\d+)$/);
-  const title = path === '/debug/logs' ? 'Application Logs' : path === '/revisions/create' ? 'Tambah Revisi Baru' : detailMatch ? 'Detail Revisi' : 'Daftar Revisi Website';
+  const normalizedPath = (path || '/revisions').replace(/\/+$/, '') || '/revisions';
+  const detailMatch = normalizedPath.match(/^\/revisions\/(\d+)(?:\/edit)?$/);
+  const detailRevisionId = Number(detailMatch?.[1] || 0);
 
-  return (
-    <AppShell theme={theme} setTheme={setTheme} title={title} path={path} navigate={navigate}>
-      {path === '/debug/logs' ? <LogsPage /> : path === '/revisions/create' ? <CreateRevisionPage onBack={() => navigate('/revisions')} /> : detailMatch ? <DetailRevisionPage revisionId={Number(detailMatch[1])} onBack={() => navigate('/revisions')} /> : <RevisionsPage onCreate={() => navigate('/revisions/create')} onOpenDetail={(revisionId) => navigate(`/revisions/${revisionId}`)} />}
-    </AppShell>
-  );
+  const title = normalizedPath === '/debug/logs'
+    ? 'Application Logs'
+    : normalizedPath === '/revisions/create'
+      ? 'Tambah Revisi Baru'
+      : detailRevisionId > 0
+        ? 'Detail Revisi'
+        : 'Daftar Revisi Website';
+
+  let pageContent;
+  if (normalizedPath === '/debug/logs') {
+    pageContent = <LogsPage />;
+  } else if (normalizedPath === '/revisions/create') {
+    pageContent = <CreateRevisionPage onBack={() => navigate('/revisions')} />;
+  } else if (detailRevisionId > 0) {
+    pageContent = <DetailRevisionPage revisionId={detailRevisionId} onBack={() => navigate('/revisions')} />;
+  } else {
+    pageContent = (
+      <RevisionsPage
+        onCreate={() => navigate('/revisions/create')}
+        onOpenDetail={(revisionId) => navigate(`/revisions/${revisionId}/edit`)}
+      />
+    );
+  }
+
+  return <AppShell theme={theme} setTheme={setTheme} title={title} path={normalizedPath} navigate={navigate}>{pageContent}</AppShell>;
 }
+
 
 function RevisionsPage({ onCreate, onOpenDetail }) {
   const [data, setData] = useState(null);
