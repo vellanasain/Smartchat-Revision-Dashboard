@@ -63,7 +63,7 @@ export function App() {
       <aside className="rail" aria-label="Navigasi utama">
         <div className="rail-top">
           <a className="rail-logo" href="#" aria-label="Smartchat">
-            <img src="/images/logo-smartchat.webp" alt="Smartchat Logo" className="smartchat-logo-img" />
+            <img src="/public/logo-smartchat.webp" alt="Smartchat Logo" className="smartchat-logo-img" />
           </a>
           <a className={`rail-nav-button ${view === 'revisions' ? 'is-active' : ''}`} href="#" onClick={(event) => { event.preventDefault(); setView('revisions'); }} title="Data revisi" aria-label="Data revisi">
             <svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5" rx="7" ry="3" /><path d="M5 5v6c0 1.7 3.1 3 7 3s7-1.3 7-3V5" /><path d="M5 11v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6" /></svg>
