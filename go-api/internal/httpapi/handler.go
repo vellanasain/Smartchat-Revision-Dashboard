@@ -3,6 +3,7 @@ package httpapi
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"website-revision-system/go-api/internal/config"
 	"website-revision-system/go-api/internal/repository"
@@ -24,7 +25,9 @@ func (h *Handler) Routes() http.Handler {
 	mux.HandleFunc("GET /api/users/marketing", h.marketingUsers)
 	mux.HandleFunc("GET /api/users/website", h.websiteUsers)
 	mux.HandleFunc("GET /api/debug/logs", h.logs)
-	return h.cors(mux)
+	mux.HandleFunc("GET /api/revisions/create-bootstrap", h.createBootstrap)
+	mux.HandleFunc("GET /api/revisions/{id}/detail-bootstrap", h.detailBootstrap)
+	return h.cors(h.trustBoundary(mux))
 }
 
 func (h *Handler) health(w http.ResponseWriter, r *http.Request) {
@@ -57,6 +60,25 @@ func (h *Handler) marketingUsers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, users)
 }
 
+func (h *Handler) createBootstrap(w http.ResponseWriter, r *http.Request) {
+	result, err := h.repo.CreateBootstrap(r.Context())
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+func (h *Handler) detailBootstrap(w http.ResponseWriter, r *http.Request) {
+	id := repository.ParseIntParam(r.PathValue("id"))
+	result, err := h.repo.DetailBootstrap(r.Context(), id)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
 func (h *Handler) websiteUsers(w http.ResponseWriter, r *http.Request) {
 	users, err := h.repo.WebsiteUsers(r.Context())
 	if err != nil {
@@ -64,6 +86,23 @@ func (h *Handler) websiteUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, users)
+}
+
+func (h *Handler) trustBoundary(next http.Handler) http.Handler {
+	sharedKey := strings.TrimSpace(h.cfg.TrustProxySharedKey)
+	if sharedKey == "" {
+		return next
+	}
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/") && r.URL.Path != "/api/health" {
+			if r.Header.Get("X-Trusted-Proxy") != "1" || r.Header.Get("X-Auth-Signature") != sharedKey {
+				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "untrusted proxy boundary"})
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (h *Handler) cors(next http.Handler) http.Handler {
