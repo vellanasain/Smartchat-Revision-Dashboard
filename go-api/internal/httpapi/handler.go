@@ -89,13 +89,31 @@ func (h *Handler) websiteUsers(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) cors(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		origin := r.Header.Get("Origin")
+
+		allowedOrigins := map[string]bool{
+			"http://127.0.0.1:5173": true,
+			"http://localhost:5173": true,
+		}
+
+		if allowedOrigins[origin] {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+		}
+
 		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set(
+			"Access-Control-Allow-Headers",
+			"Content-Type, Authorization, X-Requested-With, X-Trusted-Proxy, X-Auth-Signature",
+		)
+
+		w.Header().Set("X-Cors-Policy", "go-explicit-origin-v1")
+
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
+
 		next.ServeHTTP(w, r)
 	})
 }
