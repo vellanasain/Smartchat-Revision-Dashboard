@@ -299,6 +299,61 @@ function Pagination({ page, totalPages, totalItems, perPage, onPage }) {
 
 
 
+
+function asObject(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+}
+
+function normalizeDetailPayload(payload) {
+  const root = asObject(payload);
+  const projectInfo = asObject(root.project_info ?? root.projectInfo ?? root.project?.info);
+  const projectNotes = asObject(root.project_notes ?? root.projectNotes ?? root.project?.notes);
+  const revisionWorkflow = asObject(root.revision_workflow ?? root.workflow ?? root.revisionWorkflow);
+
+  const domain =
+    root.domain ??
+    revisionWorkflow.title ??
+    revisionWorkflow.domain ??
+    projectInfo.domain_sementara ??
+    '-';
+
+  const normalizedRows = (Array.isArray(root.rows) ? root.rows : []).map((row, index) => {
+    const safeRow = asObject(row);
+    const jenis = Number.isFinite(Number(safeRow.jenis)) ? Number(safeRow.jenis) : index;
+    return {
+      jenis,
+      label: safeRow.label ?? (jenis === 0 ? 'Website sudah jadi' : `Revisi ${jenis}`),
+      stage: safeRow.stage ?? safeRow.response ?? '',
+      work: safeRow.work ?? safeRow.work_status ?? '',
+      note: safeRow.note ?? safeRow.notes ?? '',
+    };
+  });
+
+  return {
+    csrfToken: root.csrf_token ?? root.csrfToken ?? '',
+    domain,
+    rows: normalizedRows.length ? normalizedRows : [0, 1, 2, 3].map((jenis) => ({ jenis, label: jenis === 0 ? 'Website sudah jadi' : `Revisi ${jenis}`, stage: '', work: '', note: '' })),
+    projectNotes: {
+      package_website: projectNotes.package_website ?? projectNotes.packageWebsite ?? '',
+      biaya: projectNotes.biaya ?? projectNotes.cost ?? '',
+      domain_resmi: projectNotes.domain_resmi ?? projectNotes.domainResmi ?? '',
+    },
+    projectInfo: {
+      domain_sementara: projectInfo.domain_sementara ?? domain ?? '-',
+      nama_klien: projectInfo.nama_klien ?? projectInfo.client_name ?? '-',
+      tim_marketing: projectInfo.tim_marketing ?? projectInfo.marketing ?? '-',
+      tim_web: projectInfo.tim_web ?? projectInfo.web_team ?? '--',
+      sisa_pelunasan: projectInfo.sisa_pelunasan ?? '-',
+      status_pembayaran: projectInfo.status_pembayaran ?? '-',
+      tanggal_pelunasan: projectInfo.tanggal_pelunasan ?? '-',
+    },
+    options: {
+      stages: Array.isArray(root.options?.stages) ? root.options.stages : [],
+      work: Array.isArray(root.options?.work) ? root.options.work : [],
+      work_r0: Array.isArray(root.options?.work_r0) ? root.options.work_r0 : [],
+    },
+  };
+}
 function DetailRevisionPage({ revisionId, onBack }) {
   const [csrfToken, setCsrfToken] = useState('');
   const [error, setError] = useState('');
@@ -325,32 +380,23 @@ function DetailRevisionPage({ revisionId, onBack }) {
           throw new Error('Empty response from server');
         }
         
-        console.log('API Response:', payload);
-        
-        setCsrfToken(payload.csrf_token || '');
+        console.log('Revision detail endpoint response:', payload);
+
+        const normalized = normalizeDetailPayload(payload);
+        setCsrfToken(normalized.csrfToken);
         setError('');
-        setDomain(payload.domain || '-');
-        
-        // Ensure rows is an array with proper structure
-        let rowsData = Array.isArray(payload.rows) ? payload.rows : [];
-        if (rowsData.length === 0) {
-          // Fallback: create default rows if none provided
-          rowsData = [0, 1, 2, 3].map((jenis) => ({ jenis, label: jenis === 0 ? 'Website sudah jadi' : `Revisi ${jenis}`, stage: '', work: '', note: '' }));
-        }
-        console.log('Rows data:', rowsData);
-        setRows(rowsData);
-        
-        setProjectNotes(payload.project_notes || { package_website: '', biaya: '', domain_resmi: '' });
-        setProjectInfo(payload.project_info || { domain_sementara: '-', nama_klien: '-', tim_marketing: '-', tim_web: '--', sisa_pelunasan: '-', status_pembayaran: '-', tanggal_pelunasan: '-' });
-        
-        // Ensure options has all required keys
-        const optionsData = payload.options || {};
-        console.log('Options:', optionsData);
-        setOptions({
-          stages: optionsData.stages || [],
-          work: optionsData.work || [],
-          work_r0: optionsData.work_r0 || []
-        });
+        setDomain(normalized.domain);
+        setRows(normalized.rows);
+        setProjectNotes(normalized.projectNotes);
+        setProjectInfo(normalized.projectInfo);
+        setOptions(normalized.options);
+
+        const projectDetailPayload = {
+          domain: normalized.domain,
+          project_info: normalized.projectInfo,
+          project_notes: normalized.projectNotes,
+        };
+        console.log('Project detail structure (derived):', projectDetailPayload);
         
         setLoading(false);
       })
