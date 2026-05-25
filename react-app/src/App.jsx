@@ -302,6 +302,7 @@ function Pagination({ page, totalPages, totalItems, perPage, onPage }) {
 function DetailRevisionPage({ revisionId, onBack }) {
   const [csrfToken, setCsrfToken] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
   const [domain, setDomain] = useState('-');
   const [rows, setRows] = useState([0, 1, 2, 3].map((jenis) => ({ jenis, stage: '', work: '', note: '' })));
   const [projectNotes, setProjectNotes] = useState({ package_website: '', biaya: '', domain_resmi: '' });
@@ -310,22 +311,63 @@ function DetailRevisionPage({ revisionId, onBack }) {
   const [options, setOptions] = useState({ stages: [], work: [], work_r0: [] });
 
   useEffect(() => {
-    if (!revisionId) return;
+    if (!revisionId) {
+      setLoading(false);
+      return;
+    }
+    
+    setLoading(true);
+    setError('');
+    
     fetchJSON(`/revisions/${revisionId}/detail-bootstrap`)
       .then((payload) => {
+        if (!payload) {
+          throw new Error('Empty response from server');
+        }
+        
+        console.log('API Response:', payload);
+        
         setCsrfToken(payload.csrf_token || '');
         setError('');
         setDomain(payload.domain || '-');
-        setRows(payload.rows || []);
+        
+        // Ensure rows is an array with proper structure
+        let rowsData = Array.isArray(payload.rows) ? payload.rows : [];
+        if (rowsData.length === 0) {
+          // Fallback: create default rows if none provided
+          rowsData = [0, 1, 2, 3].map((jenis) => ({ jenis, label: jenis === 0 ? 'Website sudah jadi' : `Revisi ${jenis}`, stage: '', work: '', note: '' }));
+        }
+        console.log('Rows data:', rowsData);
+        setRows(rowsData);
+        
         setProjectNotes(payload.project_notes || { package_website: '', biaya: '', domain_resmi: '' });
         setProjectInfo(payload.project_info || { domain_sementara: '-', nama_klien: '-', tim_marketing: '-', tim_web: '--', sisa_pelunasan: '-', status_pembayaran: '-', tanggal_pelunasan: '-' });
-        setOptions(payload.options || { stages: [], work: [], work_r0: [] });
+        
+        // Ensure options has all required keys
+        const optionsData = payload.options || {};
+        console.log('Options:', optionsData);
+        setOptions({
+          stages: optionsData.stages || [],
+          work: optionsData.work || [],
+          work_r0: optionsData.work_r0 || []
+        });
+        
+        setLoading(false);
       })
-      .catch(() => setError('Gagal memuat detail revisi.'));
+      .catch((err) => {
+        console.error('Failed to load revision detail:', err);
+        setError(`Gagal memuat detail revisi: ${err.message || 'Unknown error'}`);
+        setLoading(false);
+      });
   }, [revisionId]);
 
-  if (!revisionId) return <section className="form-page"><div className="alert alert-danger">Detail revisi tidak tersedia.</div></section>;
+  if (!revisionId) {
+    return <section className="form-page"><div className="alert alert-danger">Detail revisi tidak tersedia.</div></section>;
+  }
 
+  if (loading) {
+    return <section className="form-page"><div className="alert alert-danger">Memuat data revisi...</div></section>;
+  }
 
   return (
     <section className="detail-layout">
@@ -338,14 +380,14 @@ function DetailRevisionPage({ revisionId, onBack }) {
           <table className="workflow-table">
             <thead><tr><th>Status Revisi</th><th>Revision Stage</th><th>Work Status</th><th>Notes</th></tr></thead>
             <tbody>
-              {rows.map((row) => (
+              {rows && rows.length > 0 ? rows.map((row) => (
                 <tr key={row.jenis}>
-                  <td><span className="revision-code">R{row.jenis}</span><small>{row.jenis === 0 ? 'Website sudah jadi' : `Revisi ${row.jenis}`}</small></td>
-                  <td>{row.jenis === 0 ? <span className="static-select">--</span> : <select name={`stages[${row.jenis}]`} value={row.stage} onChange={(e)=>setRows(rows.map(r=>{ if(r.jenis!==row.jenis) return r; const nextStage=e.target.value; const nextWork=nextStage==='ready_to_revision' && !r.work ? 'not_started' : r.work; return {...r,stage:nextStage,work:nextWork}; }))}>{options.stages.map((opt) => <option key={opt.value || 'empty'} value={opt.value}>{opt.label}</option>)}</select>}</td>
-                  <td><select name={`work_statuses[${row.jenis}]`} value={row.work} onChange={(e)=>setRows(rows.map(r=>r.jenis===row.jenis?{...r,work:e.target.value}:r))}>{(row.jenis === 0 ? options.work_r0 : options.work).map((opt) => <option key={opt.value || `empty-${row.jenis}`} value={opt.value}>{opt.label}</option>)}</select></td>
-                  <td><input type="hidden" name={`revision_notes[${row.jenis}]`} value={row.note} /><button className="note-button" type="button" onClick={()=>setNoteDialog({open:true,jenis:row.jenis,value:row.note})}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l5 5v13H7z"></path><path d="M14 3v5h5"></path><path d="M9 13h6"></path><path d="M9 17h6"></path></svg></button></td>
+                  <td><span className="revision-code">R{row.jenis}</span><small>{row.label || (row.jenis === 0 ? 'Website sudah jadi' : `Revisi ${row.jenis}`)}</small></td>
+                  <td>{row.jenis === 0 ? <span className="static-select">--</span> : <select name={`stages[${row.jenis}]`} value={row.stage || ''} onChange={(e)=>setRows(rows.map(r=>{ if(r.jenis!==row.jenis) return r; const nextStage=e.target.value; const nextWork=nextStage==='ready_to_revision' && !r.work ? 'not_started' : r.work; return {...r,stage:nextStage,work:nextWork}; }))}>{options.stages && options.stages.length > 0 ? options.stages.map((opt) => <option key={opt.value || 'empty'} value={opt.value || ''}>{opt.label}</option>) : null}</select>}</td>
+                  <td><select name={`work_statuses[${row.jenis}]`} value={row.work || ''} onChange={(e)=>setRows(rows.map(r=>r.jenis===row.jenis?{...r,work:e.target.value}:r))}>{row.jenis === 0 ? (options.work_r0 && options.work_r0.length > 0 ? options.work_r0.map((opt) => <option key={opt.value || `empty-${row.jenis}`} value={opt.value || ''}>{opt.label}</option>) : null) : (options.work && options.work.length > 0 ? options.work.map((opt) => <option key={opt.value || `empty-${row.jenis}`} value={opt.value || ''}>{opt.label}</option>) : null)}</select></td>
+                  <td><input type="hidden" name={`revision_notes[${row.jenis}]`} value={row.note || ''} /><button className="note-button" type="button" onClick={()=>setNoteDialog({open:true,jenis:row.jenis,value:row.note || ''})}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l5 5v13H7z"></path><path d="M14 3v5h5"></path><path d="M9 13h6"></path><path d="M9 17h6"></path></svg></button></td>
                 </tr>
-              ))}
+              )) : <tr><td colSpan="4" className="empty-state">Tidak ada data revisi.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -355,20 +397,20 @@ function DetailRevisionPage({ revisionId, onBack }) {
         <div className="side-section">
           <p className="eyebrow">Project Info</p>
           <dl className="info-list">
-            <div><dt>Domain Sementara</dt><dd>{projectInfo.domain_sementara}</dd></div>
-            <div><dt>Nama Klien</dt><dd>{projectInfo.nama_klien}</dd></div>
-            <div><dt>Tim Marketing</dt><dd>{projectInfo.tim_marketing}</dd></div>
-            <div><dt>Tim Web</dt><dd>{projectInfo.tim_web}</dd></div>
-            <div><dt>Sisa Pelunasan</dt><dd>{projectInfo.sisa_pelunasan}</dd></div>
-            <div><dt>Status Pembayaran</dt><dd>{projectInfo.status_pembayaran}</dd></div>
-            <div><dt>Tanggal Pelunasan</dt><dd>{projectInfo.tanggal_pelunasan}</dd></div>
+            <div><dt>Domain Sementara</dt><dd>{projectInfo.domain_sementara || '-'}</dd></div>
+            <div><dt>Nama Klien</dt><dd>{projectInfo.nama_klien || '-'}</dd></div>
+            <div><dt>Tim Marketing</dt><dd>{projectInfo.tim_marketing || '-'}</dd></div>
+            <div><dt>Tim Web</dt><dd>{projectInfo.tim_web || '--'}</dd></div>
+            <div><dt>Sisa Pelunasan</dt><dd>{projectInfo.sisa_pelunasan || '-'}</dd></div>
+            <div><dt>Status Pembayaran</dt><dd>{projectInfo.status_pembayaran || '-'}</dd></div>
+            <div><dt>Tanggal Pelunasan</dt><dd>{projectInfo.tanggal_pelunasan || '-'}</dd></div>
           </dl>
         </div>
         <div className="side-section project-notes">
           <p className="eyebrow">Notes Project</p>
-          <label className="field"><span>Paket Website</span><input form="revision-detail-form" type="text" name="project_notes[package_website]" value={projectNotes.package_website} onChange={(e)=>setProjectNotes({...projectNotes,package_website:e.target.value})} /></label>
-          <label className="field"><span>Biaya</span><input form="revision-detail-form" type="text" name="project_notes[biaya]" value={projectNotes.biaya} onChange={(e)=>setProjectNotes({...projectNotes,biaya:e.target.value})} /></label>
-          <label className="field"><span>Domain Resmi</span><input form="revision-detail-form" type="text" name="project_notes[domain_resmi]" value={projectNotes.domain_resmi} onChange={(e)=>setProjectNotes({...projectNotes,domain_resmi:e.target.value})} /></label>
+          <label className="field"><span>Paket Website</span><input form="revision-detail-form" type="text" name="project_notes[package_website]" value={projectNotes.package_website || ''} onChange={(e)=>setProjectNotes({...projectNotes,package_website:e.target.value})} /></label>
+          <label className="field"><span>Biaya</span><input form="revision-detail-form" type="text" name="project_notes[biaya]" value={projectNotes.biaya || ''} onChange={(e)=>setProjectNotes({...projectNotes,biaya:e.target.value})} /></label>
+          <label className="field"><span>Domain Resmi</span><input form="revision-detail-form" type="text" name="project_notes[domain_resmi]" value={projectNotes.domain_resmi || ''} onChange={(e)=>setProjectNotes({...projectNotes,domain_resmi:e.target.value})} /></label>
         </div>
       </aside>
       {noteDialog.open && <div className="note-modal"><div className="note-modal-backdrop" onClick={()=>setNoteDialog({open:false,jenis:null,value:''})}></div><section className="note-dialog" role="dialog" aria-modal="true"><header><h2>Notes</h2></header><div className="note-dialog-body"><label className="field"><span>Notes</span><textarea rows="10" value={noteDialog.value} onChange={(e)=>setNoteDialog({...noteDialog,value:e.target.value})}></textarea></label></div><footer><button className="ghost-button" type="button" onClick={()=>setNoteDialog({open:false,jenis:null,value:''})}>Back</button><button className="primary-button" type="button" onClick={()=>{setRows(rows.map(r=>r.jenis===noteDialog.jenis?{...r,note:noteDialog.value}:r));setNoteDialog({open:false,jenis:null,value:''});}}>Save</button></footer></section></div>}

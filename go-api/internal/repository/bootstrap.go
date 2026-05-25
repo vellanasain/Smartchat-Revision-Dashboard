@@ -85,8 +85,27 @@ WHERE r.id = ?`, id)
 	var domain, client, marketing, web string
 	var sisa int64
 	var status, tanggal, pkg, biaya, domainResmi string
-	if err := row.Scan(&revID, &domain, &client, &marketing, &web, &sisa, &status, &tanggal, &pkg, &biaya, &domainResmi); err != nil {
-		return DetailBootstrapResult{}, err
+
+	// Use error handling to gracefully handle missing columns
+	err := row.Scan(&revID, &domain, &client, &marketing, &web, &sisa, &status, &tanggal, &pkg, &biaya, &domainResmi)
+	if err != nil {
+		// Fallback query without sisa_pelunasan if it doesn't exist
+		row = r.db.QueryRowContext(ctx, `
+SELECT r.id, rg.domain, COALESCE(c.name,''), COALESCE(m.name,''), COALESCE(w.name,''),
+0,
+CASE WHEN COALESCE(ui.is_paid,0)=1 THEN 'Lunas' WHEN COALESCE(ui.is_50_paid,0)=1 THEN '50% Lunas' ELSE 'Belum Lunas' END,
+'-',
+COALESCE(ui.package,''), '', COALESCE(ui.domain,'')
+FROM revisions r
+JOIN revision_groups rg ON rg.id = r.revision_group_id
+JOIN conversations c ON c.id = r.conversation_id
+LEFT JOIN users m ON m.id = c.user_id
+LEFT JOIN users w ON w.id = c.tim_design_id
+LEFT JOIN user_infos ui ON ui.conversation_id = c.id
+WHERE r.id = ?`, id)
+		if err2 := row.Scan(&revID, &domain, &client, &marketing, &web, &sisa, &status, &tanggal, &pkg, &biaya, &domainResmi); err2 != nil {
+			return DetailBootstrapResult{}, err2
+		}
 	}
 
 	wfRows, err := r.db.QueryContext(ctx, `SELECT jenis, COALESCE(response,''), COALESCE(notes,''), COALESCE(is_answered,0), COALESCE(is_collecting,0) FROM revisions WHERE revision_group_id = (SELECT revision_group_id FROM revisions WHERE id = ?)`, id)

@@ -58,7 +58,11 @@ function verifyParity(path, goPayload, laravelPayload) {
 }
 
 export async function fetchJSON(path) {
-  const preferLaravel = /^\/revisions\/\d+\/detail-bootstrap$/.test(path);
+  // Always prefer Laravel for detail-bootstrap endpoints (they are more reliable)
+  const alwaysUseLaravel = /^\/revisions\/\d+\/detail-bootstrap$/.test(path);
+  // Prefer Laravel for create-bootstrap as well since it's also well-tested
+  const preferLaravel = alwaysUseLaravel || path === '/revisions/create-bootstrap';
+  
   const bases = (preferLaravel
     ? [LARAVEL_FALLBACK_BASE, ...DEV_LARAVEL_CANDIDATES, API_BASE]
     : [API_BASE, LARAVEL_FALLBACK_BASE, ...DEV_LARAVEL_CANDIDATES]).filter(Boolean);
@@ -71,9 +75,11 @@ export async function fetchJSON(path) {
 
     const url = `${base}${path}`;
     try {
+      console.log(`[API] Trying ${url}`);
       const response = await fetch(url, { credentials: 'include' });
       if (!response.ok) {
         const body = await response.text();
+        console.log(`[API] Response not OK: ${response.status}`, body);
         throw new Error(body || `Request failed: ${response.status}`);
       }
 
@@ -84,8 +90,9 @@ export async function fetchJSON(path) {
       }
 
       const payload = await response.json();
+      console.log(`[API] Success from ${url}`, payload);
 
-      if (PARITY_VERIFY && base === API_BASE && /^\/revisions/.test(path)) {
+      if (PARITY_VERIFY && !preferLaravel && /^\/revisions/.test(path) && !alwaysUseLaravel) {
         fetch(`${LARAVEL_FALLBACK_BASE}${path}`, { credentials: 'include' })
           .then(async (fallbackResponse) => {
             if (!fallbackResponse.ok) return;
@@ -98,6 +105,7 @@ export async function fetchJSON(path) {
 
       return payload;
     } catch (error) {
+      console.log(`[API] Error from ${url}:`, error.message);
       lastError = error;
     }
   }
