@@ -1,10 +1,11 @@
 const BASE_URL = window.GO_API_BASE_URL || '/api';
 
-function headers(extra = {}) {
-  return {
-    'Content-Type': 'application/json',
-    ...extra,
-  };
+function buildQuery(params = {}) {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') query.set(key, String(value));
+  });
+  return query.toString() ? `?${query.toString()}` : '';
 }
 
 async function request(path, options = {}) {
@@ -16,30 +17,35 @@ async function request(path, options = {}) {
   return response.json();
 }
 
-export function listRevisionProjects() {
-  return request('/revision-projects');
+export function listRevisionProjects(params = {}) {
+  return request(`/revision-projects${buildQuery(params)}`);
 }
 
 export function getRevisionProject(id) {
   return request(`/revision-projects/${id}`);
 }
 
-export function updateRevisionProject(id, payload) {
-  return request(`/revision-projects/${id}`, {
-    method: 'PATCH',
-    headers: headers(),
-    body: JSON.stringify(payload),
-  });
+export function getRevisionProjectCycles(id) {
+  return request(`/revision-projects/${id}/cycles`);
 }
 
-export function createPaymentTransaction(payload) {
-  return request('/payment-transactions', {
-    method: 'POST',
-    headers: headers(),
-    body: JSON.stringify(payload),
-  });
+export function mapProjectRowToListItem(row) {
+  return {
+    id: row.id,
+    domain: row.temporary_domain || row.official_domain || '-',
+    clientName: row.client_name,
+    assignedWebId: row.web_executor_id,
+    revisionNo: row.current_revision_no,
+    revisionStage: row.current_revision_stage,
+    workStatus: row.current_work_status,
+    paymentStatus: row.payment_status,
+    remainingPayment: row.remaining_payment,
+    activeUntil: row.active_until || '-',
+    updatedAt: row.updated_at,
+  };
 }
 
+// TODO(deprecation): remove when Laravel blade revisions list is retired.
 export function mapProjectRowToLegacyCard(row) {
   return {
     group_id: row.id,

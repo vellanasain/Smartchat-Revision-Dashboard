@@ -26,7 +26,7 @@ func (h *Handler) Routes() http.Handler {
 	mux.HandleFunc("GET /api/revision-projects/{id}", h.getRevisionProject)
 	mux.HandleFunc("POST /api/revision-projects", h.createRevisionProject)
 	mux.HandleFunc("PATCH /api/revision-projects/{id}", h.patchRevisionProject)
-	mux.HandleFunc("GET /api/revision-projects/{id}/cycles", h.notImplemented)
+	mux.HandleFunc("GET /api/revision-projects/{id}/cycles", h.listProjectCycles)
 	mux.HandleFunc("POST /api/revision-projects/{id}/cycles", h.createCycle)
 	mux.HandleFunc("PATCH /api/revision-cycles/{id}/stage", h.patchCycleStage)
 	mux.HandleFunc("PATCH /api/revision-cycles/{id}/work-status", h.patchCycleWorkStatus)

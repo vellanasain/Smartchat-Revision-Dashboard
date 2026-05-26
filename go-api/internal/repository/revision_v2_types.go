@@ -22,6 +22,32 @@ type RevisionProject struct {
 	UpdatedAt             time.Time  `json:"updated_at"`
 }
 
+type RevisionProjectListParams struct {
+	RevisionStage     string
+	WorkStatus        string
+	PaymentStatus     string
+	AssignedWebID     int64
+	CurrentRevisionNo int
+	ActiveOnly        bool
+	Search            string
+	SortBy            string
+	SortDir           string
+	Page              int
+	PerPage           int
+	Role              string
+	ActorUserID       int64
+}
+
+type RevisionProjectListResult struct {
+	Items      []RevisionProject `json:"items"`
+	Page       int               `json:"current_page"`
+	PerPage    int               `json:"per_page"`
+	Total      int64             `json:"total"`
+	TotalPages int               `json:"total_pages"`
+	SortBy     string            `json:"sort_by"`
+	SortDir    string            `json:"sort_dir"`
+}
+
 type RevisionCycle struct {
 	ID            int64      `json:"id"`
 	ProjectID     int64      `json:"project_id"`
