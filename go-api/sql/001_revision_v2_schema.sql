@@ -81,7 +81,7 @@ CREATE TABLE IF NOT EXISTS revision_events (
 CREATE TABLE IF NOT EXISTS automation_jobs (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   project_id BIGINT UNSIGNED NOT NULL,
-  job_type ENUM('send_wa','send_email','switch_bot','sync_dashboard') NOT NULL,
+  job_type ENUM('send_whatsapp','send_email','detect_payment','notify_web_team') NOT NULL,
   payload_json JSON NULL,
   status ENUM('queued','processing','success','failed','dead_letter') NOT NULL DEFAULT 'queued',
   retry_count INT UNSIGNED NOT NULL DEFAULT 0,
