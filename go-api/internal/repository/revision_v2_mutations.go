@@ -6,58 +6,65 @@ import (
 )
 
 type CreateRevisionProjectInput struct {
-	ConversationID   int64   `json:"conversation_id"`
+	ConversationID   *int64  `json:"conversation_id"`
 	ClientName       string  `json:"client_name"`
 	TemporaryDomain  string  `json:"temporary_domain"`
 	OfficialDomain   string  `json:"official_domain"`
 	AdminPelunasanID int64   `json:"admin_pelunasan_id"`
 	WebExecutorID    *int64  `json:"web_executor_id"`
+	AssignedWebID    *int64  `json:"assigned_web_id"`
+	PackageName      string  `json:"package_name"`
 	PaymentStatus    string  `json:"payment_status"`
 	RemainingPayment float64 `json:"remaining_payment"`
 	ActiveUntil      *string `json:"active_until"`
+	Notes            string  `json:"notes"`
 }
 
 type UpdateRevisionProjectInput struct {
 	WebExecutorID        *int64   `json:"web_executor_id"`
+	AssignedWebID        *int64   `json:"assigned_web_id"`
 	PaymentStatus        *string  `json:"payment_status"`
 	RemainingPayment     *float64 `json:"remaining_payment"`
 	CurrentRevisionNo    *int     `json:"current_revision_no"`
 	CurrentRevisionStage *string  `json:"current_revision_stage"`
 	CurrentWorkStatus    *string  `json:"current_work_status"`
 	IsCompleted          *bool    `json:"is_completed"`
+	Notes                *string  `json:"notes"`
 }
 
 type CreateCycleInput struct {
-	RevisionNo    int    `json:"revision_no"`
-	RevisionLabel string `json:"revision_label"`
-	RevisionStage string `json:"revision_stage"`
-	WorkStatus    string `json:"work_status"`
-	AssignedWebID *int64 `json:"assigned_web_id"`
-	Notes         string `json:"notes"`
+	RevisionNo                               int `json:"revision_no"`
+	RevisionLabel, RevisionStage, WorkStatus string
+	AssignedWebID                            *int64 `json:"assigned_web_id"`
+	Notes                                    string `json:"notes"`
 }
 
 type PaymentInput struct {
-	ProjectID       int64   `json:"project_id"`
-	Amount          float64 `json:"amount"`
-	PaymentType     string  `json:"payment_type"`
-	PaymentStatus   string  `json:"payment_status"`
-	PaymentProofURL string  `json:"payment_proof_url"`
-	DetectedByAI    bool    `json:"detected_by_ai"`
-	PaidAt          *string `json:"paid_at"`
-	ActiveUntil     *string `json:"active_until"`
+	ProjectID                                   int64   `json:"project_id"`
+	Amount                                      float64 `json:"amount"`
+	PaymentType, PaymentStatus, PaymentProofURL string
+	DetectedByAI                                bool `json:"detected_by_ai"`
+	PaidAt, ActiveUntil                         *string
 }
 
 func (r *Repository) CreateRevisionProject(ctx context.Context, in CreateRevisionProjectInput) (int64, error) {
-	if err := ValidateRevisionNo(0); err != nil {
-		return 0, err
+	if in.ClientName == "" {
+		return 0, fmt.Errorf("client_name is required")
 	}
-	res, err := r.db.ExecContext(ctx, `INSERT INTO revision_projects (conversation_id, client_name, temporary_domain, official_domain, admin_pelunasan_id, web_executor_id, payment_status, remaining_payment, active_until, current_revision_no, current_revision_stage, current_work_status, total_free_revision_used, is_completed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, '--', 'done', 0, 0)`, in.ConversationID, in.ClientName, in.TemporaryDomain, in.OfficialDomain, in.AdminPelunasanID, in.WebExecutorID, defaultPayment(in.PaymentStatus), in.RemainingPayment, in.ActiveUntil)
+	assigned := in.WebExecutorID
+	if in.AssignedWebID != nil {
+		assigned = in.AssignedWebID
+	}
+	var conv any = nil
+	if in.ConversationID != nil {
+		conv = *in.ConversationID
+	}
+	res, err := r.db.ExecContext(ctx, `INSERT INTO revision_projects (conversation_id, client_name, temporary_domain, official_domain, admin_pelunasan_id, web_executor_id, package_name, payment_status, remaining_payment, active_until, current_revision_no, current_revision_stage, current_work_status, total_free_revision_used, is_completed, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, '--', 'done', 0, 0, ?)`, conv, in.ClientName, in.TemporaryDomain, in.OfficialDomain, in.AdminPelunasanID, assigned, in.PackageName, defaultPayment(in.PaymentStatus), in.RemainingPayment, in.ActiveUntil, in.Notes)
 	if err != nil {
 		return 0, err
 	}
 	id, _ := res.LastInsertId()
-	_, _ = r.db.ExecContext(ctx, `INSERT INTO revision_cycles (project_id, revision_no, revision_label, revision_stage, work_status, assigned_web_id, started_at, completed_at, notes) VALUES (?,0,'R0','--','done',?,?,NOW(),?)`, id, in.WebExecutorID, "Website sudah jadi")
-	_ = r.EnqueueJob(ctx, id, "send_whatsapp", `{"event":"project_created"}`)
+	_, _ = r.db.ExecContext(ctx, `INSERT INTO revision_cycles (project_id, revision_no, revision_label, revision_stage, work_status, assigned_web_id, started_at, completed_at, notes) VALUES (?,0,'R0','--','done',?,NOW(),NOW(),?)`, id, assigned, "R0 auto-created")
 	return id, nil
 }
 
@@ -99,6 +106,9 @@ func (r *Repository) UpdateRevisionProject(ctx context.Context, id int64, in Upd
 	if in.WebExecutorID != nil {
 		item.WebExecutorID = in.WebExecutorID
 	}
+	if in.AssignedWebID != nil {
+		item.WebExecutorID = in.AssignedWebID
+	}
 	if in.PaymentStatus != nil {
 		item.PaymentStatus = *in.PaymentStatus
 	}
@@ -108,7 +118,11 @@ func (r *Repository) UpdateRevisionProject(ctx context.Context, id int64, in Upd
 	if in.IsCompleted != nil {
 		item.IsCompleted = *in.IsCompleted
 	}
-	_, err = r.db.ExecContext(ctx, `UPDATE revision_projects SET web_executor_id=?, payment_status=?, remaining_payment=?, current_revision_no=?, current_revision_stage=?, current_work_status=?, is_completed=?, updated_at=NOW() WHERE id=?`, item.WebExecutorID, item.PaymentStatus, item.RemainingPayment, item.CurrentRevisionNo, item.CurrentRevisionStage, item.CurrentWorkStatus, item.IsCompleted, id)
+	notes := ""
+	if in.Notes != nil {
+		notes = *in.Notes
+	}
+	_, err = r.db.ExecContext(ctx, `UPDATE revision_projects SET web_executor_id=?, payment_status=?, remaining_payment=?, current_revision_no=?, current_revision_stage=?, current_work_status=?, is_completed=?, notes=COALESCE(NULLIF(?,''),notes), updated_at=NOW() WHERE id=?`, item.WebExecutorID, item.PaymentStatus, item.RemainingPayment, item.CurrentRevisionNo, item.CurrentRevisionStage, item.CurrentWorkStatus, item.IsCompleted, notes, id)
 	return err
 }
 
@@ -125,7 +139,6 @@ func (r *Repository) CreateCycle(ctx context.Context, projectID int64, in Create
 	_, err := r.db.ExecContext(ctx, `INSERT INTO revision_cycles (project_id, revision_no, revision_label, revision_stage, work_status, assigned_web_id, started_at, notes) VALUES (?, ?, ?, ?, ?, ?, NOW(), ?)`, projectID, in.RevisionNo, in.RevisionLabel, in.RevisionStage, in.WorkStatus, in.AssignedWebID, in.Notes)
 	return err
 }
-
 func (r *Repository) UpdateCycleStage(ctx context.Context, id int64, stage string) error {
 	var no int
 	var current string
@@ -138,7 +151,6 @@ func (r *Repository) UpdateCycleStage(ctx context.Context, id int64, stage strin
 	_, err := r.db.ExecContext(ctx, `UPDATE revision_cycles SET revision_stage=?, updated_at=NOW() WHERE id=?`, stage, id)
 	return err
 }
-
 func (r *Repository) UpdateCycleWorkStatus(ctx context.Context, id int64, work string) error {
 	var no int
 	var stage, current string
@@ -151,22 +163,10 @@ func (r *Repository) UpdateCycleWorkStatus(ctx context.Context, id int64, work s
 	_, err := r.db.ExecContext(ctx, `UPDATE revision_cycles SET work_status=?, completed_at=CASE WHEN ?='done' THEN NOW() ELSE completed_at END, updated_at=NOW() WHERE id=?`, work, work, id)
 	return err
 }
-
 func (r *Repository) CreatePayment(ctx context.Context, in PaymentInput) error {
 	_, err := r.db.ExecContext(ctx, `INSERT INTO payment_transactions (project_id, amount, payment_type, payment_status, payment_proof_url, detected_by_ai, paid_at) VALUES (?, ?, ?, ?, ?, ?, ?)`, in.ProjectID, in.Amount, in.PaymentType, in.PaymentStatus, in.PaymentProofURL, in.DetectedByAI, in.PaidAt)
-	if err != nil {
-		return err
-	}
-	if in.PaymentStatus == "settlement" {
-		_, err = r.db.ExecContext(ctx, `UPDATE revision_projects SET payment_status='paid', active_until=COALESCE(?, active_until), current_revision_stage=CASE WHEN current_revision_no IN (1,2,3) THEN 'waiting_client_data' ELSE current_revision_stage END, updated_at=NOW() WHERE id=?`, in.ActiveUntil, in.ProjectID)
-		if err != nil {
-			return err
-		}
-		_ = r.EnqueueJob(ctx, in.ProjectID, "notify_web_team", `{"event":"payment_settlement"}`)
-	}
-	return nil
+	return err
 }
-
 func (r *Repository) EnqueueJob(ctx context.Context, projectID int64, jobType string, payload string) error {
 	_, err := r.db.ExecContext(ctx, `INSERT INTO automation_jobs (project_id, job_type, payload_json, status, retry_count) VALUES (?, ?, ?, 'queued', 0)`, projectID, jobType, payload)
 	return err

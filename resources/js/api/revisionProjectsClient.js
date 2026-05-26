@@ -21,6 +21,15 @@ export function listRevisionProjects(params = {}) {
   return request(`/revision-projects${buildQuery(params)}`);
 }
 
+
+export function createRevisionProject(payload) {
+  return request('/revision-projects', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
 export function getRevisionProject(id) {
   return request(`/revision-projects/${id}`);
 }
