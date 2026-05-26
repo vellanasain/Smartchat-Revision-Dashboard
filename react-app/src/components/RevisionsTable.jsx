@@ -1,3 +1,4 @@
+// TODO_DEPRECATED: Legacy Laravel-shaped revisions table component kept temporarily during Go API migration.
 import React from 'react';
 import { money } from '../lib/api';
 
