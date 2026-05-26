@@ -1,119 +1,115 @@
+// TODO_DEPRECATED: Legacy Laravel read-flow paths are now compatibility-mapped to Go API responses.
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8081/api';
-const LARAVEL_FALLBACK_BASE = import.meta.env.VITE_LARAVEL_API_BASE || 'http://127.0.0.1:8000/api';
-const PARITY_VERIFY = (import.meta.env.VITE_PARITY_VERIFY || '1') === '1';
 
-const DEV_LARAVEL_CANDIDATES = [
-  'http://127.0.0.1:8000/api',
-  'http://localhost:8000/api',
-  'http://127.0.0.1:8080/api',
-  'http://localhost:8080/api',
-  '/api',
-];
-
-function collectShape(obj, prefix = '', out = {}) {
-  if (obj === null || obj === undefined) {
-    out[prefix || '$'] = 'null';
-    return out;
-  }
-  if (Array.isArray(obj)) {
-    out[prefix || '$'] = 'array';
-    if (obj.length > 0) collectShape(obj[0], `${prefix}[]`, out);
-    return out;
-  }
-  if (typeof obj !== 'object') {
-    out[prefix || '$'] = typeof obj;
-    return out;
-  }
-  out[prefix || '$'] = 'object';
-  Object.entries(obj).forEach(([key, value]) => collectShape(value, prefix ? `${prefix}.${key}` : key, out));
-  return out;
+function roleHeaders() {
+  return {
+    'X-User-Role': localStorage.getItem('sc_role') || 'admin_pelunasan',
+    'X-User-Id': localStorage.getItem('sc_user_id') || '1',
+  };
 }
 
-function parityKeys(path) {
-  if (path.startsWith('/revisions?')) return ['items', 'stats', 'page', 'per_page', 'total_items', 'total_pages'];
-  if (path === '/revisions/create-bootstrap') return ['csrf_token', 'marketing_users', 'website_users', 'clients', 'defaults'];
-  if (/^\/revisions\/\d+\/detail-bootstrap$/.test(path)) return ['csrf_token', 'revision_id', 'domain', 'project_info', 'project_notes', 'rows', 'options'];
-  return [];
-}
-
-function verifyParity(path, goPayload, laravelPayload) {
-  const keys = parityKeys(path);
-  if (!keys.length) return;
-
-  const missingInGo = keys.filter((key) => !(key in (goPayload || {})));
-  const missingInLaravel = keys.filter((key) => !(key in (laravelPayload || {})));
-
-  const goShape = collectShape(goPayload || {});
-  const laravelShape = collectShape(laravelPayload || {});
-  const typeMismatches = [];
-  Object.keys(laravelShape).forEach((key) => {
-    if (goShape[key] && laravelShape[key] !== goShape[key]) {
-      typeMismatches.push(`${key}: go=${goShape[key]} laravel=${laravelShape[key]}`);
-    }
+async function go(path, options = {}) {
+  const res = await fetch(`${API_BASE}${path}`, {
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', ...roleHeaders(), ...(options.headers || {}) },
+    ...options,
   });
+  const ct = res.headers.get('content-type') || '';
+  const body = ct.includes('application/json') ? await res.json() : await res.text();
+  if (!res.ok) throw new Error(typeof body === 'string' ? body : (body.error || `Request failed: ${res.status}`));
+  return body;
+}
 
-  if (missingInGo.length || missingInLaravel.length || typeMismatches.length) {
-    console.warn('[parity-check] READ contract mismatch', { path, missingInGo, missingInLaravel, typeMismatches: typeMismatches.slice(0, 12) });
-  }
+function mapListParams(path) {
+  const q = new URLSearchParams(path.split('?')[1] || '');
+  const out = new URLSearchParams();
+  out.set('page', q.get('page') || '1');
+  out.set('per_page', q.get('per_page') || '12');
+  out.set('search', q.get('q') || '');
+  if (q.get('web_id')) out.set('assigned_web_id', q.get('web_id'));
+  const filter = q.get('filter') || 'all';
+  if (filter === 'unpaid') out.set('payment_status', 'unpaid');
+  if (filter === 'process_revision') out.set('active_only', 'true');
+  if (filter === 'revision_done') out.set('active_only', 'false');
+  return out.toString();
+}
+
+async function loadRevisionProjectsTable(path) {
+  const table = await go(`/revision-projects?${mapListParams(path)}`);
+  const stats = await go('/dashboard/stats');
+  return {
+    items: (table.items || []).map((it) => ({
+      group_id: it.id,
+      revision_id: it.id,
+      domain: it.temporary_domain,
+      client_name: it.client_name,
+      marketing_name: '-',
+      web_name: it.web_executor_id ? `#${it.web_executor_id}` : '--',
+      revision_label: `R${it.current_revision_no}`,
+      revision_helper: it.current_revision_stage || '--',
+      remaining_payment: it.remaining_payment,
+      payment_class: it.payment_status === 'paid' ? 'is-paid' : 'is-unpaid',
+      payment_label: it.payment_status,
+      active_period: it.active_until ? new Date(it.active_until).toLocaleDateString('id-ID') : '-',
+    })),
+    stats: {
+      total: stats.total_projects || 0,
+      unpaid: stats.unpaid || 0,
+      process_revision: (stats.total_projects || 0) - (stats.completed || 0),
+      revision_done: stats.completed || 0,
+    },
+    page: table.page,
+    per_page: table.per_page,
+    total_items: table.total,
+    total_pages: table.total_pages,
+  };
+}
+
+async function detailBootstrap(id) {
+  const [project, cycles, webUsers] = await Promise.all([
+    go(`/revision-projects/${id}`),
+    go(`/revision-projects/${id}/cycles`),
+    go('/users/website'),
+  ]);
+  return {
+    csrf_token: '',
+    revision_id: id,
+    domain: project.temporary_domain || '-',
+    project_info: {
+      domain_sementara: project.temporary_domain || '-',
+      nama_klien: project.client_name || '-',
+      tim_marketing: '-',
+      tim_web: project.web_executor_id ? `#${project.web_executor_id}` : '--',
+      sisa_pelunasan: money(project.remaining_payment),
+      status_pembayaran: project.payment_status || '-',
+      tanggal_pelunasan: '-',
+    },
+    project_notes: { package_website: '', biaya: '', domain_resmi: project.official_domain || '' },
+    rows: (cycles.items || []).map((c) => ({ jenis: c.revision_no, label: c.revision_label, stage: c.revision_stage, work: c.work_status, note: c.notes || '' })),
+    options: {
+      stages: [{ value: '', label: '--' }, { value: 'waiting_client_data', label: 'waiting_client_data' }, { value: 'ready_to_revision', label: 'ready_to_revision' }, { value: 'ready_to_connection', label: 'ready_to_connection' }],
+      work: [{ value: '', label: '--' }, { value: 'not_started', label: 'not_started' }, { value: 'on_progress', label: 'on_progress' }, { value: 'done', label: 'done' }],
+      work_r0: [{ value: 'done', label: 'done' }],
+      web_users: webUsers || [],
+    },
+  };
 }
 
 export async function fetchJSON(path) {
-  // Always prefer Laravel for detail-bootstrap endpoints (they are more reliable)
-  const alwaysUseLaravel = /^\/revisions\/\d+\/detail-bootstrap$/.test(path);
-  // Prefer Laravel for create-bootstrap as well since it's also well-tested
-  const preferLaravel = alwaysUseLaravel || path === '/revisions/create-bootstrap';
-  
-  const bases = (preferLaravel
-    ? [LARAVEL_FALLBACK_BASE, ...DEV_LARAVEL_CANDIDATES, API_BASE]
-    : [API_BASE, LARAVEL_FALLBACK_BASE, ...DEV_LARAVEL_CANDIDATES]).filter(Boolean);
-  const seen = new Set();
-  let lastError = null;
-
-  for (const base of bases) {
-    if (seen.has(base)) continue;
-    seen.add(base);
-
-    const url = `${base}${path}`;
-    try {
-      console.log(`[API] Trying ${url}`);
-      const response = await fetch(url, { credentials: 'include' });
-      if (!response.ok) {
-        const body = await response.text();
-        console.log(`[API] Response not OK: ${response.status}`, body);
-        throw new Error(body || `Request failed: ${response.status}`);
-      }
-
-      const contentType = response.headers.get('content-type') || '';
-      if (!contentType.includes('application/json')) {
-        const body = await response.text();
-        throw new Error(`Non-JSON response from ${url}: ${body.slice(0, 120)}`);
-      }
-
-      const payload = await response.json();
-      console.log(`[API] Success from ${url}`, payload);
-
-      if (PARITY_VERIFY && !preferLaravel && /^\/revisions/.test(path) && !alwaysUseLaravel) {
-        fetch(`${LARAVEL_FALLBACK_BASE}${path}`, { credentials: 'include' })
-          .then(async (fallbackResponse) => {
-            if (!fallbackResponse.ok) return;
-            if (!(fallbackResponse.headers.get('content-type') || '').includes('application/json')) return;
-            const laravelPayload = await fallbackResponse.json();
-            verifyParity(path, payload, laravelPayload);
-          })
-          .catch(() => {});
-      }
-
-      return payload;
-    } catch (error) {
-      console.log(`[API] Error from ${url}:`, error.message);
-      lastError = error;
-    }
+  if (path.startsWith('/revisions?')) return loadRevisionProjectsTable(path);
+  if (path === '/users/marketing') return [];
+  if (path === '/users/website') return go('/users/website');
+  if (path === '/revisions/create-bootstrap') {
+    const web = await go('/users/website');
+    return { csrf_token: '', marketing_users: [], website_users: web, clients: [], defaults: {} };
   }
-
-  throw lastError || new Error('Request failed');
+  const m = path.match(/^\/revisions\/(\d+)\/detail-bootstrap$/);
+  if (m) return detailBootstrap(m[1]);
+  if (path.startsWith('/debug/logs')) return { lines: [] };
+  return go(path);
 }
 
 export function money(value) {
-  if (!value) return '-';
+  if (!value && value !== 0) return '-';
   return `Rp ${new Intl.NumberFormat('id-ID').format(Number(value))}`;
 }
