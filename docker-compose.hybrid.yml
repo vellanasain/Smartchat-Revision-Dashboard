@@ -39,5 +39,5 @@ services:
       - ./:/app
     environment:
       VITE_API_BASE: /go-api/api
-      VITE_LARAVEL_API_BASE: /api
+      VITE_LARAVEL_API_BASE: http://127.0.0.1:8000/api
       VITE_PARITY_VERIFY: '1'

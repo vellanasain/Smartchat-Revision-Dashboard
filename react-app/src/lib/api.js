@@ -1,13 +1,13 @@
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8081/api';
-const LARAVEL_FALLBACK_BASE = import.meta.env.VITE_LARAVEL_API_BASE || 'http://127.0.0.1:8080/api';
+const LARAVEL_FALLBACK_BASE = import.meta.env.VITE_LARAVEL_API_BASE || 'http://127.0.0.1:8000/api';
 const PARITY_VERIFY = (import.meta.env.VITE_PARITY_VERIFY || '1') === '1';
 
 const DEV_LARAVEL_CANDIDATES = [
-  '/api',
-  'http://127.0.0.1:8080/api',
-  'http://localhost:8080/api',
   'http://127.0.0.1:8000/api',
   'http://localhost:8000/api',
+  'http://127.0.0.1:8080/api',
+  'http://localhost:8080/api',
+  '/api',
 ];
 
 function collectShape(obj, prefix = '', out = {}) {
