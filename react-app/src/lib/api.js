@@ -1,119 +1,43 @@
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8081/api';
-const LARAVEL_FALLBACK_BASE = import.meta.env.VITE_LARAVEL_API_BASE || 'http://127.0.0.1:8000/api';
-const PARITY_VERIFY = (import.meta.env.VITE_PARITY_VERIFY || '1') === '1';
 
-const DEV_LARAVEL_CANDIDATES = [
-  'http://127.0.0.1:8000/api',
-  'http://localhost:8000/api',
-  'http://127.0.0.1:8080/api',
-  'http://localhost:8080/api',
-  '/api',
-];
-
-function collectShape(obj, prefix = '', out = {}) {
-  if (obj === null || obj === undefined) {
-    out[prefix || '$'] = 'null';
-    return out;
-  }
-  if (Array.isArray(obj)) {
-    out[prefix || '$'] = 'array';
-    if (obj.length > 0) collectShape(obj[0], `${prefix}[]`, out);
-    return out;
-  }
-  if (typeof obj !== 'object') {
-    out[prefix || '$'] = typeof obj;
-    return out;
-  }
-  out[prefix || '$'] = 'object';
-  Object.entries(obj).forEach(([key, value]) => collectShape(value, prefix ? `${prefix}.${key}` : key, out));
-  return out;
+function getRoleHeaders() {
+  const role = localStorage.getItem('sc_role') || 'admin_pelunasan';
+  const userId = localStorage.getItem('sc_user_id') || '1';
+  return {
+    'X-User-Role': role,
+    'X-User-Id': userId,
+  };
 }
 
-function parityKeys(path) {
-  if (path.startsWith('/revisions?')) return ['items', 'stats', 'page', 'per_page', 'total_items', 'total_pages'];
-  if (path === '/revisions/create-bootstrap') return ['csrf_token', 'marketing_users', 'website_users', 'clients', 'defaults'];
-  if (/^\/revisions\/\d+\/detail-bootstrap$/.test(path)) return ['csrf_token', 'revision_id', 'domain', 'project_info', 'project_notes', 'rows', 'options'];
-  return [];
-}
-
-function verifyParity(path, goPayload, laravelPayload) {
-  const keys = parityKeys(path);
-  if (!keys.length) return;
-
-  const missingInGo = keys.filter((key) => !(key in (goPayload || {})));
-  const missingInLaravel = keys.filter((key) => !(key in (laravelPayload || {})));
-
-  const goShape = collectShape(goPayload || {});
-  const laravelShape = collectShape(laravelPayload || {});
-  const typeMismatches = [];
-  Object.keys(laravelShape).forEach((key) => {
-    if (goShape[key] && laravelShape[key] !== goShape[key]) {
-      typeMismatches.push(`${key}: go=${goShape[key]} laravel=${laravelShape[key]}`);
-    }
+export async function apiRequest(path, options = {}) {
+  const response = await fetch(`${API_BASE}${path}`, {
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getRoleHeaders(),
+      ...(options.headers || {}),
+    },
+    ...options,
   });
 
-  if (missingInGo.length || missingInLaravel.length || typeMismatches.length) {
-    console.warn('[parity-check] READ contract mismatch', { path, missingInGo, missingInLaravel, typeMismatches: typeMismatches.slice(0, 12) });
+  const contentType = response.headers.get('content-type') || '';
+  const body = contentType.includes('application/json') ? await response.json() : await response.text();
+
+  if (!response.ok) {
+    throw new Error(typeof body === 'string' ? body : (body.error || `Request failed: ${response.status}`));
   }
+  return body;
 }
 
-export async function fetchJSON(path) {
-  // Always prefer Laravel for detail-bootstrap endpoints (they are more reliable)
-  const alwaysUseLaravel = /^\/revisions\/\d+\/detail-bootstrap$/.test(path);
-  // Prefer Laravel for create-bootstrap as well since it's also well-tested
-  const preferLaravel = alwaysUseLaravel || path === '/revisions/create-bootstrap';
-  
-  const bases = (preferLaravel
-    ? [LARAVEL_FALLBACK_BASE, ...DEV_LARAVEL_CANDIDATES, API_BASE]
-    : [API_BASE, LARAVEL_FALLBACK_BASE, ...DEV_LARAVEL_CANDIDATES]).filter(Boolean);
-  const seen = new Set();
-  let lastError = null;
-
-  for (const base of bases) {
-    if (seen.has(base)) continue;
-    seen.add(base);
-
-    const url = `${base}${path}`;
-    try {
-      console.log(`[API] Trying ${url}`);
-      const response = await fetch(url, { credentials: 'include' });
-      if (!response.ok) {
-        const body = await response.text();
-        console.log(`[API] Response not OK: ${response.status}`, body);
-        throw new Error(body || `Request failed: ${response.status}`);
-      }
-
-      const contentType = response.headers.get('content-type') || '';
-      if (!contentType.includes('application/json')) {
-        const body = await response.text();
-        throw new Error(`Non-JSON response from ${url}: ${body.slice(0, 120)}`);
-      }
-
-      const payload = await response.json();
-      console.log(`[API] Success from ${url}`, payload);
-
-      if (PARITY_VERIFY && !preferLaravel && /^\/revisions/.test(path) && !alwaysUseLaravel) {
-        fetch(`${LARAVEL_FALLBACK_BASE}${path}`, { credentials: 'include' })
-          .then(async (fallbackResponse) => {
-            if (!fallbackResponse.ok) return;
-            if (!(fallbackResponse.headers.get('content-type') || '').includes('application/json')) return;
-            const laravelPayload = await fallbackResponse.json();
-            verifyParity(path, payload, laravelPayload);
-          })
-          .catch(() => {});
-      }
-
-      return payload;
-    } catch (error) {
-      console.log(`[API] Error from ${url}:`, error.message);
-      lastError = error;
-    }
-  }
-
-  throw lastError || new Error('Request failed');
+export function loadRevisionProjectsTable(params) {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => {
+    if (v !== '' && v !== null && v !== undefined) query.set(k, String(v));
+  });
+  return apiRequest(`/revision-projects?${query.toString()}`);
 }
 
 export function money(value) {
-  if (!value) return '-';
+  if (value === null || value === undefined || value === '') return '-';
   return `Rp ${new Intl.NumberFormat('id-ID').format(Number(value))}`;
 }

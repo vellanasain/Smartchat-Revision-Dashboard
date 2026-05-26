@@ -1,638 +1,101 @@
-import React from 'react'
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { fetchJSON, money } from './lib/api';
+import React, { useEffect, useMemo, useState } from 'react';
+import { apiRequest, loadRevisionProjectsTable, money } from './lib/api';
 
-const filters = [
-  ['all', 'Semua'],
-  ['unpaid', 'Belum Lunas'],
-  ['process_revision', 'Proses Revisi'],
-  ['revision_done', 'Revisi Sudah Selesai'],
-];
+const STAGE_OPTIONS = ['', '--', 'waiting_client_data', 'ready_to_revision', 'ready_to_connection'];
+const WORK_OPTIONS = ['', '--', 'not_started', 'on_progress', 'done'];
 
-function readParamsFromURL() {
-  const query = new URLSearchParams(window.location.search);
-  return {
-    q: query.get('q') || '',
-    filter: query.get('filter') || 'all',
-    marketing_id: query.get('marketing_id') || '',
-    web_id: query.get('web_id') || '',
-    page: Math.max(1, Number(query.get('page') || 1) || 1),
-  };
-}
-
-function writeParamsToURL(params) {
-  const query = new URLSearchParams();
-  if (params.filter && params.filter !== 'all') query.set('filter', params.filter);
-  if (params.q) query.set('q', params.q);
-  if (params.marketing_id) query.set('marketing_id', params.marketing_id);
-  if (params.web_id) query.set('web_id', params.web_id);
-  if (params.page && params.page > 1) query.set('page', String(params.page));
-  const queryString = query.toString();
-  const nextURL = `${window.location.pathname}${queryString ? `?${queryString}` : ''}`;
-  window.history.pushState({}, '', nextURL);
-}
-
-
-
-function buildPageItems(currentPage, totalPages) {
-  const pages = new Set([1, totalPages]);
-  for (let page = currentPage - 1; page <= currentPage + 1; page++) {
-    if (page >= 1 && page <= totalPages) pages.add(page);
-  }
-  const sortedPages = [...pages].sort((a, b) => a - b);
-  const items = [];
-  for (let index = 0; index < sortedPages.length; index++) {
-    const page = sortedPages[index];
-    if (index > 0 && page - sortedPages[index - 1] > 1) items.push('...');
-    items.push(page);
-  }
-  return items;
-}
 export function App() {
-  const [theme, setTheme] = useState(localStorage.getItem('revision-theme') || 'dark');
-  const [view, setView] = useState(() => (window.location.pathname === '/revisions/create' ? 'create' : 'revisions'));
-  const [activeRevisionId, setActiveRevisionId] = useState(null);
+  const [view, setView] = useState('list');
+  const [selectedId, setSelectedId] = useState(null);
+  const [toast, setToast] = useState(null);
+  useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 2500); return () => clearTimeout(t); }, [toast]);
 
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('revision-theme', theme);
-  }, [theme]);
-
-  return (
-    <div className="app-shell">
-      <aside className="rail" aria-label="Navigasi utama">
-        <div className="rail-top">
-          <a className="rail-logo" href="#" aria-label="Smartchat">
-            <img src="/public/logo-smartchat.webp" alt="Smartchat Logo" className="smartchat-logo-img" />
-          </a>
-          <a className={`rail-nav-button ${view === 'revisions' ? 'is-active' : ''}`} href="#" onClick={(event) => { event.preventDefault(); setView('revisions'); }} title="Data revisi" aria-label="Data revisi">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5" rx="7" ry="3" /><path d="M5 5v6c0 1.7 3.1 3 7 3s7-1.3 7-3V5" /><path d="M5 11v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6" /></svg>
-          </a>
-          <a className={`rail-nav-button ${view === 'logs' ? 'is-active' : ''}`} href="#" onClick={(event) => { event.preventDefault(); setView('logs'); }} title="Application Logs" aria-label="Application Logs">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l3 3v15H6z" /><path d="M14 3v4h4" /><path d="M9 11h6" /><path d="M9 15h6" /></svg>
-          </a>
-        </div>
-        <div className="rail-bottom">
-          <button className="rail-nav-button theme-switch" type="button" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} aria-label="Ganti mode gelap terang" title="Ganti mode">
-            <span className="theme-icon theme-icon-sun" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4 12H2M22 12h-2M5 5l1.5 1.5M17.5 17.5 19 19M19 5l-1.5 1.5M6.5 17.5 5 19" /></svg></span>
-            <span className="theme-icon theme-icon-moon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a7 7 0 1 0 10.5 10.5Z" /></svg></span>
-          </button>
-          <button className="rail-nav-button" type="button" aria-label="Pengaturan" title="Pengaturan">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5Z" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1A2 2 0 1 1 4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7A2 2 0 1 1 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3h.1a1.7 1.7 0 0 0 .9-1.6V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1A2 2 0 1 1 19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9v.1a1.7 1.7 0 0 0 1.6.9h.1a2 2 0 0 1 0 4H21a1.7 1.7 0 0 0-1.6 1Z" /></svg>
-          </button>
-          <button className="rail-nav-button logout-button" type="button" aria-label="Logout" title="Logout">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-2" /><path d="M10 12h10" /><path d="m17 9 3 3-3 3" /></svg>
-          </button>
-        </div>
-      </aside>
-
-      <main className="page-shell">
-        <header className="topbar">
-          <div>
-            <h1>{view === 'logs' ? 'Application Logs' : view === 'create' ? 'Tambah Revisi Baru' : view === 'detail' ? 'Detail Revisi' : 'Daftar Revisi Website'}</h1>
-            <p>Smartchat Website Revision Workspace</p>
-          </div>
-          <div className="local-state"><span /> Local active</div>
-        </header>
-        {view === 'logs' ? <LogsPage /> : view === 'create' ? <CreateRevisionPage onBack={() => setView('revisions')} /> : view === 'detail' ? <DetailRevisionPage revisionId={activeRevisionId} onBack={() => setView('revisions')} /> : <RevisionsPage onCreate={() => setView('create')} onOpenDetail={(revisionId) => { setActiveRevisionId(revisionId); setView('detail'); }} />}
-      </main>
-    </div>
-  );
+  return <main className="page-shell">{toast && <div className="alert alert-success">{toast}</div>}
+    {view === 'list' && <RevisionsPage onOpen={(id) => { setSelectedId(id); setView('detail'); }} onToast={setToast} />}
+    {view === 'detail' && <DetailPage projectId={selectedId} onBack={() => setView('list')} onToast={setToast} />}
+  </main>;
 }
 
-function RevisionsPage({ onCreate, onOpenDetail }) {
-  const [data, setData] = useState(null);
-  const [marketingUsers, setMarketingUsers] = useState([]);
-  const [websiteUsers, setWebsiteUsers] = useState([]);
-  const [params, setParams] = useState(() => readParamsFromURL());
+function RevisionsPage({ onOpen, onToast }) {
+  const [params, setParams] = useState({ search: '', revision_stage: '', work_status: '', payment_status: '', assigned_web_id: '', current_revision_no: '', active_only: '1', sort_by: 'updated_at', sort_dir: 'desc', page: 1, per_page: 12 });
+  const [list, setList] = useState({ items: [] });
+  const [stats, setStats] = useState({ total_projects: 0, unpaid: 0, assigned_projects: 0, completed: 0 });
+  const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [searchDraft, setSearchDraft] = useState(() => readParamsFromURL().q);
 
-  const queryString = useMemo(() => {
-    const query = new URLSearchParams();
-    Object.entries(params).forEach(([key, value]) => {
-      if (value) query.set(key, value);
-    });
-    query.set('per_page', '12');
-    return query.toString();
-  }, [params]);
-
-  useEffect(() => {
-    let alive = true;
+  const query = useMemo(() => params, [params]);
+  const refresh = () => {
     setLoading(true);
-    fetchJSON(`/revisions?${queryString}`)
-      .then((payload) => alive && setData(payload))
-      .catch((err) => alive && setError(err.message))
-      .finally(() => alive && setLoading(false));
-    return () => { alive = false; };
-  }, [queryString]);
-
-  useEffect(() => {
-    fetchJSON('/users/marketing').then(setMarketingUsers).catch(() => {});
-    fetchJSON('/users/website').then(setWebsiteUsers).catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    const onPopState = () => {
-      const nextParams = readParamsFromURL();
-      setParams(nextParams);
-      setSearchDraft(nextParams.q);
-    };
-    window.addEventListener('popstate', onPopState);
-    return () => window.removeEventListener('popstate', onPopState);
-  }, []);
-
-  const updateParams = (nextParams) => {
-    setParams(nextParams);
-    writeParamsToURL(nextParams);
+    Promise.all([
+      loadRevisionProjectsTable(query),
+      apiRequest('/dashboard/stats'),
+      apiRequest('/users/website'),
+    ]).then(([table, stat, webUsers]) => { setList(table); setStats(stat); setUsers(webUsers); setError(''); })
+      .catch((e) => setError(e.message)).finally(() => setLoading(false));
   };
 
-  const stats = data?.stats || { total: 0, unpaid: 0, process_revision: 0, revision_done: 0 };
+  useEffect(refresh, [query.page, query.search, query.revision_stage, query.work_status, query.payment_status, query.assigned_web_id, query.current_revision_no, query.active_only, query.sort_by, query.sort_dir]);
 
-  return (
-    <>
-      <section className="workspace-head">
-        <h2>Manajemen Revisi Website</h2>
-        <form className="search-form" onSubmit={(event) => { event.preventDefault(); updateParams({ ...params, q: searchDraft, page: 1 }); }}>
-          <label>
-            <span>Cari revisi</span>
-            <input type="search" value={searchDraft} onChange={(event) => setSearchDraft(event.target.value)} placeholder="Cari domain, nama klien, atau tim" />
-          </label>
-          <label>
-            <span>Filter tim marketing</span>
-            <select value={params.marketing_id} onChange={(event) => updateParams({ ...params, marketing_id: event.target.value, page: 1 })}>
-              <option value="">Semua Marketing</option>
-              {marketingUsers.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
-            </select>
-          </label>
-          <label>
-            <span>Filter tim web</span>
-            <select value={params.web_id} onChange={(event) => updateParams({ ...params, web_id: event.target.value, page: 1 })}>
-              <option value="">Semua Tim Web</option>
-              {websiteUsers.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
-            </select>
-          </label>
-          <button className="primary-button icon-button search-button" type="submit" aria-label="Cari">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m16.5 16.5 4 4" /></svg>
-          </button>
-        </form>
-        <a className="primary-button add-button" href="/revisions/create" onClick={(event) => { event.preventDefault(); onCreate(); }}>Tambah Revisi Baru</a>
-      </section>
-
-      <section className="metric-grid" aria-label="Ringkasan revisi">
-        <Metric title="Total Revisi" value={stats.total} />
-        <Metric title="Belum Lunas" value={stats.unpaid} />
-        <Metric title="Proses Revisi" value={stats.process_revision} />
-        <Metric title="Revisi Selesai" value={stats.revision_done} />
-      </section>
-
-      <section className="revision-board">
-        <div className="board-title"><h2>Daftar Revisi Aktif</h2></div>
-        <div className="filter-tabs" aria-label="Filter revisi">
-          {filters.map(([key, label]) => (
-            <a key={key} href="#" className={params.filter === key ? 'is-selected' : ''} onClick={(event) => { event.preventDefault(); updateParams({ ...params, filter: key, page: 1 }); }}>{label}</a>
-          ))}
-        </div>
-        <div className="revision-table-wrap">
-          {error && <div className="alert alert-danger">{error}</div>}
-          <table className="revision-table">
-            <thead>
-              <tr>
-                <th>Domain Sementara</th>
-                <th>Nama Klien</th>
-                <th>Tim Marketing</th>
-                <th>Tim Web</th>
-                <th>Status Revisi</th>
-                <th>Sisa Pelunasan</th>
-                <th>Status Pembayaran</th>
-                <th>Periode Aktif</th>
-                <th>Aksi</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? <tr><td colSpan="9" className="empty-state">Memuat data...</td></tr> : (data?.items?.length ? data.items.map((item) => <RevisionRow key={item.group_id} item={item} onOpenDetail={onOpenDetail} />) : <tr><td colSpan="9" className="empty-state">Tidak ada revisi yang cocok dengan filter.</td></tr>)}
-            </tbody>
-          </table>
-        </div>
-        <Pagination
-          page={data?.page || 1}
-          totalPages={data?.total_pages || 1}
-          totalItems={data?.total_items || 0}
-          perPage={data?.per_page || 12}
-          onPage={(page) => updateParams({ ...params, page })}
-        />
-      </section>
-    </>
-  );
-}
-
-function Metric({ title, value }) {
-  return <article className="metric-card"><span>{title}</span><strong>{new Intl.NumberFormat('id-ID').format(value || 0)}</strong></article>;
-}
-
-function RevisionRow({ item, onOpenDetail }) {
-  return (
-    <tr>
-      <td className="domain-column"><strong>{item.domain || '-'}</strong></td>
-      <td>{item.client_name || '-'}</td>
-      <td>{item.marketing_name || '-'}</td>
-      <td>{item.web_name || '--'}</td>
-      <td><span className="revision-code">{item.revision_label}</span><small>{item.revision_helper}</small></td>
-      <td>{money(item.remaining_payment)}</td>
-      <td><span className={`payment-pill ${item.payment_class}`}>{item.payment_label}</span></td>
-      <td>{item.active_period || '-'}</td>
-      <td>
-        <div className="action-buttons">
-          {item.revision_id ? <a className="action-button detail" href={`/revisions/${item.revision_id}/edit`} onClick={(event) => { event.preventDefault(); onOpenDetail(item.revision_id); }} aria-label={`Detail revisi ${item.domain || "-"}`} title="Detail"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9" /><path d="m16.5 3.5 4 4L8 20H4v-4L16.5 3.5Z" /></svg></a> : <span className="action-button detail is-disabled" aria-label="Detail tidak tersedia"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9" /><path d="m16.5 3.5 4 4L8 20H4v-4L16.5 3.5Z" /></svg></span>}
-          <button className="action-button delete" type="button" aria-label="Hapus"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v5" /><path d="M14 11v5" /></svg></button>
-        </div>
-      </td>
-    </tr>
-  );
-}
-
-function Pagination({ page, totalPages, totalItems, perPage, onPage }) {
-  if (totalPages <= 1) return null;
-
-  const start = totalItems === 0 ? 0 : (page - 1) * perPage + 1;
-  const end = Math.min(page * perPage, totalItems);
-  const items = buildPageItems(page, totalPages);
-
-  return (
-    <div className="pagination-wrap">
-      <nav className="clean-pagination" role="navigation" aria-label="Pagination">
-        <p className="pagination-summary">Showing {start} to {end} of {totalItems} results</p>
-        <ul className="pagination">
-          <li className={`page-item ${page <= 1 ? 'disabled' : ''}`}>
-            {page <= 1 ? (
-              <span className="page-link" aria-hidden="true">&lsaquo;</span>
-            ) : (
-              <a className="page-link" href="#" rel="prev" aria-label="Halaman sebelumnya" onClick={(event) => { event.preventDefault(); onPage(page - 1); }}>&lsaquo;</a>
-            )}
-          </li>
-
-          {items.map((item, index) => (
-            <li key={`${item}-${index}`} className={`page-item ${item === '...' ? 'disabled' : item === page ? 'active' : ''}`}>
-              {item === '...' ? (
-                <span className="page-link">...</span>
-              ) : item === page ? (
-                <span className="page-link">{item}</span>
-              ) : (
-                <a className="page-link" href="#" onClick={(event) => { event.preventDefault(); onPage(item); }}>{item}</a>
-              )}
-            </li>
-          ))}
-
-          <li className={`page-item ${page >= totalPages ? 'disabled' : ''}`}>
-            {page >= totalPages ? (
-              <span className="page-link" aria-hidden="true">&rsaquo;</span>
-            ) : (
-              <a className="page-link" href="#" rel="next" aria-label="Halaman berikutnya" onClick={(event) => { event.preventDefault(); onPage(page + 1); }}>&rsaquo;</a>
-            )}
-          </li>
-        </ul>
-      </nav>
+  return <section>
+    <h2>Revision Projects</h2>
+    <div className="metric-grid">
+      <Metric title="Total Revisions" value={stats.total_projects} />
+      <Metric title="Unpaid" value={stats.unpaid} />
+      <Metric title="Active Revisions" value={stats.total_projects - stats.completed} />
+      <Metric title="Completed Projects" value={stats.completed} />
     </div>
-  );
+
+    <div className="form-grid">
+      <input placeholder="Search" value={params.search} onChange={(e) => setParams({ ...params, search: e.target.value, page: 1 })} />
+      <select value={params.revision_stage} onChange={(e) => setParams({ ...params, revision_stage: e.target.value, page: 1 })}>{STAGE_OPTIONS.map((x) => <option key={x} value={x}>{x || 'All stage'}</option>)}</select>
+      <select value={params.work_status} onChange={(e) => setParams({ ...params, work_status: e.target.value, page: 1 })}>{WORK_OPTIONS.map((x) => <option key={x} value={x}>{x || 'All work'}</option>)}</select>
+      <select value={params.payment_status} onChange={(e) => setParams({ ...params, payment_status: e.target.value, page: 1 })}><option value="">All payment</option><option value="paid">paid</option><option value="unpaid">unpaid</option><option value="overdue">overdue</option></select>
+      <select value={params.assigned_web_id} onChange={(e) => setParams({ ...params, assigned_web_id: e.target.value, page: 1 })}><option value="">All web</option>{users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}</select>
+      <button onClick={refresh} disabled={loading}>Refresh</button>
+    </div>
+    {error && <div className="alert alert-danger">{error}</div>}
+    <div className="revision-table-wrap"><table className="revision-table"><thead><tr><th>Client</th><th>Temporary Domain</th><th>Web</th><th>Stage</th><th>Work</th><th>Payment</th><th>Remaining</th><th>Updated</th><th /></tr></thead><tbody>
+      {loading ? <tr><td colSpan="9">Loading...</td></tr> : (list.items?.length ? list.items.map((it) => <tr key={it.id}><td>{it.client_name}</td><td>{it.temporary_domain}</td><td>{it.web_executor_id || '--'}</td><td><StatusBadge value={it.current_revision_stage} /></td><td><StatusBadge value={it.current_work_status} /></td><td><StatusBadge value={it.payment_status} /></td><td>{money(it.remaining_payment)}</td><td>{new Date(it.updated_at).toLocaleString('id-ID')}</td><td><button onClick={() => onOpen(it.id)}>Detail</button></td></tr>) : <tr><td colSpan="9">Empty state: tidak ada data.</td></tr>)}
+    </tbody></table></div>
+    <div className="form-actions"><button disabled={params.page <= 1} onClick={() => setParams({ ...params, page: params.page - 1 })}>Prev</button><span>Page {list.page || 1}/{list.total_pages || 1}</span><button disabled={(list.page || 1) >= (list.total_pages || 1)} onClick={() => setParams({ ...params, page: params.page + 1 })}>Next</button></div>
+  </section>;
 }
 
-
-
-
-function asObject(value) {
-  return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
-}
-
-function normalizeDetailPayload(payload) {
-  const root = asObject(payload);
-  const projectInfo = asObject(root.project_info ?? root.projectInfo ?? root.project?.info);
-  const projectNotes = asObject(root.project_notes ?? root.projectNotes ?? root.project?.notes);
-  const revisionWorkflow = asObject(root.revision_workflow ?? root.workflow ?? root.revisionWorkflow);
-
-  const domain =
-    root.domain ??
-    revisionWorkflow.title ??
-    revisionWorkflow.domain ??
-    projectInfo.domain_sementara ??
-    '-';
-
-  const normalizedRows = (Array.isArray(root.rows) ? root.rows : []).map((row, index) => {
-    const safeRow = asObject(row);
-    const jenis = Number.isFinite(Number(safeRow.jenis)) ? Number(safeRow.jenis) : index;
-    return {
-      jenis,
-      label: safeRow.label ?? (jenis === 0 ? 'Website sudah jadi' : `Revisi ${jenis}`),
-      stage: safeRow.stage ?? safeRow.response ?? '',
-      work: safeRow.work ?? safeRow.work_status ?? '',
-      note: safeRow.note ?? safeRow.notes ?? '',
-    };
-  });
-
-  return {
-    csrfToken: root.csrf_token ?? root.csrfToken ?? '',
-    domain,
-    rows: normalizedRows.length ? normalizedRows : [0, 1, 2, 3].map((jenis) => ({ jenis, label: jenis === 0 ? 'Website sudah jadi' : `Revisi ${jenis}`, stage: '', work: '', note: '' })),
-    projectNotes: {
-      package_website: projectNotes.package_website ?? projectNotes.packageWebsite ?? '',
-      biaya: projectNotes.biaya ?? projectNotes.cost ?? '',
-      domain_resmi: projectNotes.domain_resmi ?? projectNotes.domainResmi ?? '',
-    },
-    projectInfo: {
-      domain_sementara: projectInfo.domain_sementara ?? domain ?? '-',
-      nama_klien: projectInfo.nama_klien ?? projectInfo.client_name ?? '-',
-      tim_marketing: projectInfo.tim_marketing ?? projectInfo.marketing ?? '-',
-      tim_web: projectInfo.tim_web ?? projectInfo.web_team ?? '--',
-      sisa_pelunasan: projectInfo.sisa_pelunasan ?? '-',
-      status_pembayaran: projectInfo.status_pembayaran ?? '-',
-      tanggal_pelunasan: projectInfo.tanggal_pelunasan ?? '-',
-    },
-    options: {
-      stages: Array.isArray(root.options?.stages) ? root.options.stages : [],
-      work: Array.isArray(root.options?.work) ? root.options.work : [],
-      work_r0: Array.isArray(root.options?.work_r0) ? root.options.work_r0 : [],
-    },
-  };
-}
-function DetailRevisionPage({ revisionId, onBack }) {
-  const [csrfToken, setCsrfToken] = useState('');
-  const [error, setError] = useState('');
+function DetailPage({ projectId, onBack, onToast }) {
+  const [project, setProject] = useState(null);
+  const [cycles, setCycles] = useState([]);
+  const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [domain, setDomain] = useState('-');
-  const [rows, setRows] = useState([0, 1, 2, 3].map((jenis) => ({ jenis, stage: '', work: '', note: '' })));
-  const [projectNotes, setProjectNotes] = useState({ package_website: '', biaya: '', domain_resmi: '' });
-  const [projectInfo, setProjectInfo] = useState({ domain_sementara: '-', nama_klien: '-', tim_marketing: '-', tim_web: '--', sisa_pelunasan: '-', status_pembayaran: '-', tanggal_pelunasan: '-' });
-  const [noteDialog, setNoteDialog] = useState({ open: false, jenis: null, value: '' });
-  const [options, setOptions] = useState({ stages: [], work: [], work_r0: [] });
+  const [submitting, setSubmitting] = useState(false);
+  const role = localStorage.getItem('sc_role') || 'admin_pelunasan';
 
-  useEffect(() => {
-    if (!revisionId) {
-      setLoading(false);
-      return;
-    }
-    
+  const load = () => {
     setLoading(true);
-    setError('');
-    
-    fetchJSON(`/revisions/${revisionId}/detail-bootstrap`)
-      .then((payload) => {
-        if (!payload) {
-          throw new Error('Empty response from server');
-        }
-        
-        console.log('Revision detail endpoint response:', payload);
-
-        const normalized = normalizeDetailPayload(payload);
-        setCsrfToken(normalized.csrfToken);
-        setError('');
-        setDomain(normalized.domain);
-        setRows(normalized.rows);
-        setProjectNotes(normalized.projectNotes);
-        setProjectInfo(normalized.projectInfo);
-        setOptions(normalized.options);
-
-        const projectDetailPayload = {
-          domain: normalized.domain,
-          project_info: normalized.projectInfo,
-          project_notes: normalized.projectNotes,
-        };
-        console.log('Project detail structure (derived):', projectDetailPayload);
-        
-        setLoading(false);
-      })
-      .catch((err) => {
-        console.error('Failed to load revision detail:', err);
-        setError(`Gagal memuat detail revisi: ${err.message || 'Unknown error'}`);
-        setLoading(false);
-      });
-  }, [revisionId]);
-
-  if (!revisionId) {
-    return <section className="form-page"><div className="alert alert-danger">Detail revisi tidak tersedia.</div></section>;
-  }
-
-  if (loading) {
-    return <section className="form-page"><div className="alert alert-danger">Memuat data revisi...</div></section>;
-  }
-
-  return (
-    <section className="detail-layout">
-      <form id="revision-detail-form" className="revision-work-panel" action={`/revisions/${revisionId}`} method="POST">
-        <input type="hidden" name="_token" value={csrfToken} />
-        <input type="hidden" name="_method" value="PUT" />
-        <div className="form-header"><div><p className="eyebrow">Revision Workflow</p><h2>{domain}</h2></div></div>
-        {error && <div className="alert alert-danger">{error}</div>}
-        <div className="workflow-table-wrap">
-          <table className="workflow-table">
-            <thead><tr><th>Status Revisi</th><th>Revision Stage</th><th>Work Status</th><th>Notes</th></tr></thead>
-            <tbody>
-              {rows && rows.length > 0 ? rows.map((row) => (
-                <tr key={row.jenis}>
-                  <td><span className="revision-code">R{row.jenis}</span><small>{row.label || (row.jenis === 0 ? 'Website sudah jadi' : `Revisi ${row.jenis}`)}</small></td>
-                  <td>{row.jenis === 0 ? <span className="static-select">--</span> : <select name={`stages[${row.jenis}]`} value={row.stage || ''} onChange={(e)=>setRows(rows.map(r=>{ if(r.jenis!==row.jenis) return r; const nextStage=e.target.value; const nextWork=nextStage==='ready_to_revision' && !r.work ? 'not_started' : r.work; return {...r,stage:nextStage,work:nextWork}; }))}>{options.stages && options.stages.length > 0 ? options.stages.map((opt) => <option key={opt.value || 'empty'} value={opt.value || ''}>{opt.label}</option>) : null}</select>}</td>
-                  <td><select name={`work_statuses[${row.jenis}]`} value={row.work || ''} onChange={(e)=>setRows(rows.map(r=>r.jenis===row.jenis?{...r,work:e.target.value}:r))}>{row.jenis === 0 ? (options.work_r0 && options.work_r0.length > 0 ? options.work_r0.map((opt) => <option key={opt.value || `empty-${row.jenis}`} value={opt.value || ''}>{opt.label}</option>) : null) : (options.work && options.work.length > 0 ? options.work.map((opt) => <option key={opt.value || `empty-${row.jenis}`} value={opt.value || ''}>{opt.label}</option>) : null)}</select></td>
-                  <td><input type="hidden" name={`revision_notes[${row.jenis}]`} value={row.note || ''} /><button className="note-button" type="button" onClick={()=>setNoteDialog({open:true,jenis:row.jenis,value:row.note || ''})}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l5 5v13H7z"></path><path d="M14 3v5h5"></path><path d="M9 13h6"></path><path d="M9 17h6"></path></svg></button></td>
-                </tr>
-              )) : <tr><td colSpan="4" className="empty-state">Tidak ada data revisi.</td></tr>}
-            </tbody>
-          </table>
-        </div>
-        <div className="form-actions"><a className="ghost-button" href="/revisions" onClick={(e)=>{e.preventDefault();onBack();}}>Back</a><button className="primary-button" type="submit">Update</button></div>
-      </form>
-      <aside className="revision-info-panel">
-        <div className="side-section">
-          <p className="eyebrow">Project Info</p>
-          <dl className="info-list">
-            <div><dt>Domain Sementara</dt><dd>{projectInfo.domain_sementara || '-'}</dd></div>
-            <div><dt>Nama Klien</dt><dd>{projectInfo.nama_klien || '-'}</dd></div>
-            <div><dt>Tim Marketing</dt><dd>{projectInfo.tim_marketing || '-'}</dd></div>
-            <div><dt>Tim Web</dt><dd>{projectInfo.tim_web || '--'}</dd></div>
-            <div><dt>Sisa Pelunasan</dt><dd>{projectInfo.sisa_pelunasan || '-'}</dd></div>
-            <div><dt>Status Pembayaran</dt><dd>{projectInfo.status_pembayaran || '-'}</dd></div>
-            <div><dt>Tanggal Pelunasan</dt><dd>{projectInfo.tanggal_pelunasan || '-'}</dd></div>
-          </dl>
-        </div>
-        <div className="side-section project-notes">
-          <p className="eyebrow">Notes Project</p>
-          <label className="field"><span>Paket Website</span><input form="revision-detail-form" type="text" name="project_notes[package_website]" value={projectNotes.package_website || ''} onChange={(e)=>setProjectNotes({...projectNotes,package_website:e.target.value})} /></label>
-          <label className="field"><span>Biaya</span><input form="revision-detail-form" type="text" name="project_notes[biaya]" value={projectNotes.biaya || ''} onChange={(e)=>setProjectNotes({...projectNotes,biaya:e.target.value})} /></label>
-          <label className="field"><span>Domain Resmi</span><input form="revision-detail-form" type="text" name="project_notes[domain_resmi]" value={projectNotes.domain_resmi || ''} onChange={(e)=>setProjectNotes({...projectNotes,domain_resmi:e.target.value})} /></label>
-        </div>
-      </aside>
-      {noteDialog.open && <div className="note-modal"><div className="note-modal-backdrop" onClick={()=>setNoteDialog({open:false,jenis:null,value:''})}></div><section className="note-dialog" role="dialog" aria-modal="true"><header><h2>Notes</h2></header><div className="note-dialog-body"><label className="field"><span>Notes</span><textarea rows="10" value={noteDialog.value} onChange={(e)=>setNoteDialog({...noteDialog,value:e.target.value})}></textarea></label></div><footer><button className="ghost-button" type="button" onClick={()=>setNoteDialog({open:false,jenis:null,value:''})}>Back</button><button className="primary-button" type="button" onClick={()=>{setRows(rows.map(r=>r.jenis===noteDialog.jenis?{...r,note:noteDialog.value}:r));setNoteDialog({open:false,jenis:null,value:''});}}>Save</button></footer></section></div>}
-    </section>
-  );
-}
-
-function CreateRevisionPage({ onBack }) {
-  const [marketingUsers, setMarketingUsers] = useState([]);
-  const [websiteUsers, setWebsiteUsers] = useState([]);
-  const [clients, setClients] = useState([]);
-  const [csrfToken, setCsrfToken] = useState('');
-  const [form, setForm] = useState({ domain: '', user_id: '', nama: '', tim_design_id: '', sisa_pelunasan: '' });
-  const [moneyInput, setMoneyInput] = useState('');
-  const [error, setError] = useState('');
-  const [clientMenuOpen, setClientMenuOpen] = useState(false);
-  const comboboxRef = useRef(null);
-
-  useEffect(() => {
-    fetchJSON('/revisions/create-bootstrap')
-      .then((payload) => {
-        setCsrfToken(payload.csrf_token || '');
-        setMarketingUsers(payload.marketing_users || []);
-        setWebsiteUsers(payload.website_users || []);
-        setClients(payload.clients || []);
-        const defaults = payload.defaults || {};
-        const nextForm = {
-          domain: defaults.domain || '',
-          user_id: defaults.user_id || '',
-          nama: defaults.nama || '',
-          tim_design_id: defaults.tim_design_id || '',
-          sisa_pelunasan: defaults.sisa_pelunasan || '',
-        };
-        setForm(nextForm);
-        setMoneyInput(formatRupiah(nextForm.sisa_pelunasan));
-        setError(payload.error || '');
-      })
-      .catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    const closeOnOutside = (event) => {
-      if (!comboboxRef.current?.contains(event.target)) {
-        setClientMenuOpen(false);
-      }
-    };
-
-    document.addEventListener('click', closeOnOutside);
-    return () => document.removeEventListener('click', closeOnOutside);
-  }, []);
-
-  const formatRupiah = (value) => {
-    const number = String(value || '').replace(/\D/g, '');
-    return number ? `Rp ${new Intl.NumberFormat('id-ID').format(Number(number))}` : '';
+    Promise.all([apiRequest(`/revision-projects/${projectId}`), apiRequest(`/revision-projects/${projectId}/cycles`), apiRequest('/users/website')])
+      .then(([p, c, u]) => { setProject(p); setCycles(c.items || []); setUsers(u); })
+      .finally(() => setLoading(false));
   };
+  useEffect(load, [projectId]);
 
-  const filteredClients = clients
-    .filter((client) => String(client.marketing_id) === String(form.user_id))
-    .filter((client) => !form.nama.trim() || String(client.name).toLowerCase().includes(form.nama.trim().toLowerCase()))
-    .slice(0, 80);
+  const updateProject = async (payload) => { setSubmitting(true); try { await apiRequest(`/revision-projects/${projectId}`, { method: 'PATCH', body: JSON.stringify(payload) }); onToast('Update berhasil'); load(); } catch (e) { onToast(e.message); } finally { setSubmitting(false); } };
+  const updateCycle = async (cycleId, field, value) => { setSubmitting(true); try { await apiRequest(`/revision-cycles/${cycleId}/${field}`, { method: 'PATCH', body: JSON.stringify(field === 'stage' ? { stage: value } : { work_status: value }) }); onToast('Cycle updated'); load(); } catch (e) { onToast(e.message); } finally { setSubmitting(false); } };
 
-  const onSubmit = (event) => {
-    if (!form.domain || !form.user_id) {
-      event.preventDefault();
-      setError('Domain sementara dan tim marketing wajib diisi.');
-    }
-  };
-
-  return (
-    <section className="form-page">
-      <form className="edit-panel create-revision-form" action="/revisions" method="POST" onSubmit={onSubmit}>
-        <input type="hidden" name="_token" value={csrfToken} />
-        <div className="form-header">
-          <div>
-            <p className="eyebrow">Revisi Website</p>
-            <h2>Data Revisi Baru</h2>
-          </div>
-        </div>
-
-        {error && <div className="alert alert-danger">{error}</div>}
-
-        <div className="form-grid">
-          <label className="field">
-            <span>Domain Sementara</span>
-            <input type="text" name="domain" value={form.domain} onChange={(event) => setForm({ ...form, domain: event.target.value })} placeholder="contoh: namadomain.asa17.com" required />
-          </label>
-
-          <label className="field">
-            <span>Tim Marketing</span>
-            <select name="user_id" value={form.user_id} onChange={(event) => { setForm({ ...form, user_id: event.target.value, nama: '' }); setClientMenuOpen(Boolean(event.target.value)); }} required>
-              <option value="">Pilih tim marketing</option>
-              {marketingUsers.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
-            </select>
-          </label>
-
-          <label className="field client-combobox" ref={comboboxRef}>
-            <span>Nama Klien</span>
-            <input type="search" name="nama" value={form.nama} onFocus={() => form.user_id && setClientMenuOpen(true)} onInput={() => form.user_id && setClientMenuOpen(true)} onChange={(event) => setForm({ ...form, nama: event.target.value })} placeholder="Pilih marketing dulu, lalu cari klien" autoComplete="off" />
-            <button type="button" className="combo-trigger" onClick={() => form.user_id && setClientMenuOpen((open) => !open)} aria-label="Tampilkan pilihan klien">▾</button>
-            <div className="client-menu" hidden={!clientMenuOpen || !form.user_id}>
-              {filteredClients.length ? filteredClients.map((client) => (
-                <button key={`${client.marketing_id}-${client.name}`} type="button" onClick={() => { setForm({ ...form, nama: client.name }); setClientMenuOpen(false); }}>
-                  {client.name}
-                </button>
-              )) : <div className="client-empty">Tidak ada klien yang cocok.</div>}
-            </div>
-          </label>
-
-          <label className="field">
-            <span>Tim Website</span>
-            <select name="tim_design_id" value={form.tim_design_id} onChange={(event) => setForm({ ...form, tim_design_id: event.target.value })}>
-              <option value="">--</option>
-              {websiteUsers.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
-            </select>
-          </label>
-
-          <label className="field">
-            <span>Sisa Pelunasan</span>
-            <input
-              type="text"
-              data-money-input
-              placeholder="Rp 0"
-              inputMode="numeric"
-              value={moneyInput}
-              onChange={(event) => {
-                const raw = event.target.value.replace(/\D/g, '');
-                setForm({ ...form, sisa_pelunasan: raw });
-                setMoneyInput(formatRupiah(raw));
-              }}
-            />
-            <input type="hidden" name="sisa_pelunasan" value={form.sisa_pelunasan} data-money-value />
-          </label>
-        </div>
-
-        <div className="form-actions">
-          <a className="ghost-button" href="/revisions" onClick={(event) => { event.preventDefault(); onBack(); }}>Back</a>
-          <button className="primary-button" type="submit">Save</button>
-        </div>
-      </form>
-    </section>
-  );
+  if (loading) return <div>Loading detail...</div>;
+  if (!project) return <div className="alert alert-danger">Project not found</div>;
+  return <section>
+    <button onClick={onBack}>← Back</button>
+    <h3>{project.client_name} ({project.temporary_domain})</h3>
+    <div className="form-grid">
+      <div>payment: <StatusBadge value={project.payment_status} /></div><div>remaining: {money(project.remaining_payment)}</div><div>revision: R{project.current_revision_no}</div><div>active until: {project.active_until ? new Date(project.active_until).toLocaleDateString('id-ID') : '-'}</div>
+      {role === 'admin_pelunasan' && <><select disabled={submitting} defaultValue={project.web_executor_id || ''} onChange={(e) => updateProject({ web_executor_id: e.target.value ? Number(e.target.value) : null })}><option value="">assign web</option>{users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}</select>
+      <button disabled={submitting} onClick={() => apiRequest(`/revision-projects/${projectId}/cycles`, { method: 'POST', body: JSON.stringify({}) }).then(() => { onToast('Cycle created'); load(); })}>Create Next Cycle</button></>}
+    </div>
+    <h4>Revision Timeline R0-R4</h4>
+    <div>{cycles.map((c) => <div key={c.id || c.revision_no} className="metric-card"><strong>R{c.revision_no} - {c.revision_label}</strong><div>stage: <StatusBadge value={c.revision_stage} /></div><div>work: <StatusBadge value={c.work_status} /></div><div>assigned: {c.assigned_web_id || '--'}</div><div>notes: {c.notes || '-'}</div><div>{c.started_at || '-'} → {c.completed_at || '-'}</div><div className="form-actions">{role === 'admin_pelunasan' && <select disabled={submitting} value={c.revision_stage || ''} onChange={(e) => updateCycle(c.id, 'stage', e.target.value)}>{STAGE_OPTIONS.map((x) => <option key={x} value={x}>{x || '--'}</option>)}</select>}<select disabled={submitting} value={c.work_status || ''} onChange={(e) => updateCycle(c.id, 'work-status', e.target.value)}>{WORK_OPTIONS.map((x) => <option key={x} value={x}>{x || '--'}</option>)}</select></div></div>)}</div>
+  </section>;
 }
 
-function LogsPage() {
-  const [lines, setLines] = useState([]);
-  const [lineCount, setLineCount] = useState(300);
+function Metric({ title, value }) { return <article className="metric-card"><span>{title}</span><strong>{value || 0}</strong></article>; }
+function StatusBadge({ value }) { return <span className="payment-pill">{value || '--'}</span>; }
 
-  useEffect(() => {
-    fetchJSON(`/debug/logs?lines=${lineCount}`).then((payload) => setLines(payload.lines || [])).catch(() => setLines([]));
-  }, [lineCount]);
-
-  return (
-    <section className="debug-page">
-      <div className="debug-toolbar">
-        <div>
-          <h2>Application Logs</h2>
-          <p>storage/logs/laravel.log</p>
-        </div>
-        <form className="debug-actions" onSubmit={(event) => event.preventDefault()}>
-          <select value={lineCount} onChange={(event) => setLineCount(Number(event.target.value))}>
-            {[100, 300, 500, 1000].map((option) => <option key={option} value={option}>{option} lines</option>)}
-          </select>
-          <button className="primary-button" type="button" onClick={() => setLineCount((value) => Number(value))}>Refresh</button>
-        </form>
-      </div>
-      <div className="log-panel" aria-label="Application log output">
-        {lines.length ? lines.map((line, index) => <div key={`${index}-${line}`} className={`log-line ${logClass(line)}`}>{line}</div>) : <div className="log-empty">Belum ada log yang bisa ditampilkan.</div>}
-      </div>
-    </section>
-  );
-}
-
-function logClass(line) {
-  if (line.includes('.ERROR') || line.includes(' ERROR:')) return 'is-error';
-  if (line.includes('.WARNING') || line.includes(' WARNING:')) return 'is-warning';
-  if (line.includes('.INFO') || line.includes(' INFO:')) return 'is-info';
-  if (line.includes('.DEBUG') || line.includes(' DEBUG:')) return 'is-debug';
-  return '';
-}
